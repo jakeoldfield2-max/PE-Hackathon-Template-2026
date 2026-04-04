@@ -1,3 +1,6 @@
+from io import BytesIO
+
+
 def test_create_user(client):
     response = client.post("/users", json={
         "username": "testuser",
@@ -42,3 +45,24 @@ def test_get_user_by_id(client):
 def test_get_user_not_found(client):
     response = client.get("/users/99999")
     assert response.status_code == 404
+
+
+def test_bulk_create_users(client):
+    csv_data = "username,email\nalpha,alpha@example.com\nbeta,beta@example.com\n"
+
+    response = client.post(
+        "/users/bulk",
+        data={
+            "file": (BytesIO(csv_data.encode("utf-8")), "users.csv"),
+            "row_count": "2",
+        },
+        content_type="multipart/form-data",
+    )
+
+    assert response.status_code in (200, 201)
+    data = response.get_json()
+    assert data["created"] == 2
+    assert data["row_count"] == 2
+
+    list_response = client.get("/users")
+    assert len(list_response.get_json()["users"]) == 2

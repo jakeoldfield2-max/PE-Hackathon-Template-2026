@@ -1,9 +1,12 @@
+import csv
+from io import StringIO
 from datetime import datetime
 
 from flask import Blueprint, jsonify, request
 from peewee import IntegrityError
 from playhouse.shortcuts import model_to_dict
 
+from app.database import db
 from app.cache import cache_get, cache_set, cache_delete_pattern
 from app.models.user import User
 
@@ -43,6 +46,63 @@ def create_user():
     cache_delete_pattern("users:*")
 
     return jsonify(model_to_dict(user)), 201
+
+
+@users_bp.route("/users/bulk", methods=["POST"])
+def bulk_create_users():
+    """Create users from an uploaded CSV file."""
+    upload = request.files.get("file")
+    payload = request.get_json(silent=True) or {}
+    expected_row_count = request.form.get("row_count", type=int)
+    if expected_row_count is None:
+        expected_row_count = payload.get("row_count")
+
+    csv_text = None
+    if upload is not None:
+        csv_text = upload.read().decode("utf-8-sig")
+    elif isinstance(payload.get("csv"), str):
+        csv_text = payload["csv"]
+
+    if not csv_text:
+        return jsonify(error="CSV file is required"), 400
+
+    rows = list(csv.DictReader(StringIO(csv_text)))
+    if expected_row_count is not None and expected_row_count != len(rows):
+        return jsonify(error="row_count does not match CSV rows"), 400
+
+    created_users = []
+    skipped_rows = 0
+
+    with db.atomic():
+        for row in rows:
+            username = (row.get("username") or "").strip()
+            email = (row.get("email") or "").strip()
+
+            if not username or not email:
+                skipped_rows += 1
+                continue
+
+            if User.select().where((User.username == username) | (User.email == email)).exists():
+                skipped_rows += 1
+                continue
+
+            user = User.create(
+                username=username,
+                email=email,
+                created_at=datetime.now(),
+            )
+            created_users.append(model_to_dict(user))
+
+    cache_delete_pattern("users:*")
+
+    status_code = 201 if created_users else 200
+    return jsonify({
+        "message": "Bulk user import complete",
+        "created": len(created_users),
+        "skipped": skipped_rows,
+        "row_count": len(rows),
+        "users": created_users,
+    }), status_code
 
 
 @users_bp.route("/users", methods=["GET"])
