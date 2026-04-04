@@ -92,6 +92,17 @@ class TestUserCreation:
         assert data['id'] == sample_user['id']
         assert data['username'] == sample_user['username']
 
+    def test_create_user_malformed_json(self, client):
+        """Test that sending unparseable JSON returns 400, not a server crash.
+        This covers graceful failure — bad input should never cause a 500 error."""
+        response = client.post(
+            '/users',
+            data='{not valid json',
+            content_type='application/json'
+        )
+        # Flask's JSON parser catches the syntax error and returns 400 Bad Request
+        assert response.status_code == 400
+
     def test_get_user_not_found(self, client):
         """Test retrieving a non-existent user returns 404."""
         response = client.get('/users/999999')
