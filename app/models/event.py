@@ -1,0 +1,17 @@
+from peewee import IntegerField, CharField, DateTimeField, TextField, ForeignKeyField
+
+from app.database import BaseModel
+from app.models.user import User
+from app.models.url import Url
+
+
+class Event(BaseModel):
+    id = IntegerField(primary_key=True)
+    url_id = ForeignKeyField(Url, backref="events", column_name="url_id")
+    user_id = ForeignKeyField(User, backref="events", column_name="user_id")
+    event_type = CharField()
+    timestamp = DateTimeField()
+    details = TextField()
+
+    class Meta:
+        table_name = "events"
