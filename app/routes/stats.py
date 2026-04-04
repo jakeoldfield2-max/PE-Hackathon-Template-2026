@@ -1,6 +1,7 @@
 from flask import Blueprint, jsonify
 from peewee import fn
 
+from app.observability import update_business_metrics
 from app.models.user import User
 from app.models.url import Url
 from app.models.event import Event
@@ -17,7 +18,15 @@ def stats():
     total_users = User.select().count()
     total_urls = Url.select().count()
     active_urls = Url.select().where(Url.is_active == True).count()  # noqa: E712
+    active_users = (
+        Url.select(Url.user_id)
+        .where(Url.is_active == True)  # noqa: E712
+        .distinct()
+        .count()
+    )
     total_events = Event.select().count()
+
+    update_business_metrics(active_urls=active_urls, active_users=active_users)
 
     event_breakdown = {}
     for row in (
@@ -30,6 +39,7 @@ def stats():
         "total_users": total_users,
         "total_urls": total_urls,
         "active_urls": active_urls,
+        "active_users": active_users,
         "total_events": total_events,
         "events_by_type": event_breakdown,
     })

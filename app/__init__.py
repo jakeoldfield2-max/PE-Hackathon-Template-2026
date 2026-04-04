@@ -2,11 +2,18 @@ from dotenv import load_dotenv
 from flask import Flask, jsonify
 
 from app.database import db, init_db
+from app.logging_config import attach_request_id_handlers, configure_json_logging
+from app.observability import (
+    after_request_metrics,
+    before_request_metrics,
+    metrics_response,
+)
 from app.routes import register_routes
 
 
 def create_app():
     load_dotenv()
+    configure_json_logging()
 
     app = Flask(__name__)
 
@@ -14,7 +21,15 @@ def create_app():
 
     from app import models  # noqa: F401 - registers models with Peewee
 
+    attach_request_id_handlers(app)
+    app.before_request(before_request_metrics)
+    app.after_request(after_request_metrics)
+
     register_routes(app)
+
+    @app.route("/metrics")
+    def metrics():
+        return metrics_response()
 
     # --- Standardized JSON error handlers ---
     # WHY: Without these, Flask returns HTML error pages for unhandled errors.

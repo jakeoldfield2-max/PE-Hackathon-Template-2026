@@ -1,0 +1,49 @@
+groups:
+  - name: urlpulse-alerts
+    rules:
+      - alert: ServiceDown
+        expr: up{job="urlpulse"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: urlpulse
+        annotations:
+          summary: "URLPulse instance down"
+          description: "Instance {{ $labels.instance }} is unreachable for more than 1 minute."
+
+      - alert: HighErrorRate
+        expr: |
+          sum(rate(http_requests_total{status=~"5.."}[2m]))
+          /
+          sum(rate(http_requests_total[2m])) > 0.05
+        for: 2m
+        labels:
+          severity: warning
+          service: urlpulse
+        annotations:
+          summary: "High 5xx error rate"
+          description: "5xx error rate is above 5% for 2 minutes."
+
+      - alert: HighLatency
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum(rate(http_request_duration_seconds_bucket[2m])) by (le)
+          ) > 2
+        for: 2m
+        labels:
+          severity: warning
+          service: urlpulse
+        annotations:
+          summary: "High p95 latency"
+          description: "p95 request latency is above 2 seconds for 2 minutes."
+
+      - alert: HighMemoryUsage
+        expr: process_resident_memory_bytes > 500000000
+        for: 2m
+        labels:
+          severity: warning
+          service: urlpulse
+        annotations:
+          summary: "High process memory usage"
+          description: "Process RSS memory is above 500MB for 2 minutes."
