@@ -17,7 +17,11 @@ def create_app():
 
     app = Flask(__name__)
 
-    init_db(app)
+    try:
+        init_db(app)
+    except Exception:
+        # App can start without DB - /health will work, /ready will return 503
+        pass
 
     from app import models  # noqa: F401 - registers models with Peewee
 
