@@ -40,10 +40,6 @@ jobs:
       - name: Smoke test image can boot Flask app
         run: |
           docker run --rm \
-            -e DATABASE_HOST=localhost \
-            -e DATABASE_NAME=hackathon_db \
-            -e DATABASE_USER=postgres \
-            -e DATABASE_PASSWORD=postgres \
             urlpulse:ci \
             uv run python -c "from run import app; print(app.url_map)"
 
@@ -52,5 +48,10 @@ jobs:
     needs: [test, docker-build]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
+      - name: Validate GitHub Actions context
+        run: |
+          test -n "${{ github.repository }}"
+          test -n "${{ github.ref }}"
+
       - name: Deploy placeholder
         run: echo "Deploy would run here (blocked unless test and docker-build pass)."

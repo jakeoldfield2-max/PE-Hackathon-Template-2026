@@ -19,7 +19,17 @@ def app():
     app = create_app()
     app.config["TESTING"] = True
 
-    # Swap the DB proxy to point at in-memory SQLite
+    # Disable production DB lifecycle hooks; they reconnect/close per request.
+    # With in-memory SQLite that can reset state between requests.
+    app.before_request_funcs[None] = [
+        fn for fn in app.before_request_funcs.get(None, []) if fn.__name__ != "_db_connect"
+    ]
+    app.teardown_appcontext_funcs = [
+        fn for fn in app.teardown_appcontext_funcs if fn.__name__ != "_db_close"
+    ]
+
+    # Force the shared DB proxy used by route code to SQLite for tests.
+    db.initialize(test_db)
     test_db.bind([User, Url, Event])
     test_db.connect()
     test_db.create_tables([User, Url, Event])
