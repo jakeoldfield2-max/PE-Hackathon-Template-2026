@@ -12,6 +12,7 @@ build/
 
 # Environment variables
 .env
+.env.docker
 SECRETS.md
 
 # uv
@@ -36,4 +37,4 @@ Thumbs.db
 judging/
 
 # Internal docs (plans, notes)
-docs/
+docs/PLAN.md

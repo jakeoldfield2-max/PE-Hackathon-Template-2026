@@ -1,0 +1,102 @@
+# WHY 3 app instances: Scalability Gold requires surviving 1 instance kill
+# while 2 continue serving. restart:always provides auto-recovery.
+# WHY Nginx: Round-robin load balancing across instances (docs/DECISIONS.md #2).
+# WHY Redis maxmemory-policy allkeys-lru: Prevents OOM crash by evicting
+# least-recently-used keys (docs/INCIDENT_POSTMORTEM.md INC-001).
+
+services:
+  # --- Application instances ---
+  app-1:
+    build: .
+    container_name: urlpulse-app-1
+    restart: always
+    env_file: .env.docker
+    environment:
+      - INSTANCE_ID=app-1
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  app-2:
+    build: .
+    container_name: urlpulse-app-2
+    restart: always
+    env_file: .env.docker
+    environment:
+      - INSTANCE_ID=app-2
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  app-3:
+    build: .
+    container_name: urlpulse-app-3
+    restart: always
+    env_file: .env.docker
+    environment:
+      - INSTANCE_ID=app-3
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # --- Load Balancer ---
+  nginx:
+    image: nginx:alpine
+    container_name: urlpulse-nginx
+    restart: always
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - app-1
+      - app-2
+      - app-3
+
+  # --- Database ---
+  postgres:
+    image: postgres:16
+    container_name: urlpulse-postgres
+    restart: always
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-hackathon_db}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # --- Cache ---
+  redis:
+    image: redis:7-alpine
+    container_name: urlpulse-redis
+    restart: always
+    # WHY these flags: appendonly for durability across restarts,
+    # maxmemory 256mb caps memory usage, allkeys-lru evicts old keys
+    # instead of crashing (docs/INCIDENT_POSTMORTEM.md INC-001).
+    command: >
+      redis-server
+      --appendonly yes
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata:
+  redisdata:

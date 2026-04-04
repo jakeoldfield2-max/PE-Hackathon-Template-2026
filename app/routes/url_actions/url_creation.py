@@ -5,6 +5,7 @@ import json
 
 from flask import Blueprint, jsonify, request
 
+from app.cache import cache_delete_pattern
 from app.models.user import User
 from app.models.url import Url
 from app.models.event import Event
@@ -87,6 +88,8 @@ def shorten_url():
             "original_url": original_url
         })
     )
+
+    cache_delete_pattern("urls:*")
 
     # Build the shortened URL
     short_url = f"{request.host_url}{short_code}"
