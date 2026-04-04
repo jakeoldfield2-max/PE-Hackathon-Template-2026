@@ -1,4 +1,9 @@
+import json
+import logging
 import os
+import sys
+import traceback
+from datetime import datetime, timezone
 
 from dotenv import load_dotenv
 from flask import Flask, jsonify
@@ -13,15 +18,53 @@ from app.observability import (
 from app.routes import register_routes
 
 
+def _log_startup_event(level, message, **extra):
+    """Log a structured JSON message during startup (before Flask logging is ready)."""
+    log_entry = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "level": level,
+        "logger": "app.startup",
+        "message": message,
+        "phase": "startup",
+        **extra
+    }
+    print(json.dumps(log_entry), file=sys.stderr, flush=True)
+
+
 def create_app():
     load_dotenv()
+
+    _log_startup_event("INFO", "Application starting",
+                       python_version=sys.version,
+                       testing_mode=bool(os.environ.get("TESTING")))
+
     configure_json_logging()
+    logger = logging.getLogger(__name__)
 
     app = Flask(__name__)
 
     # Skip PostgreSQL init in test mode - tests use SQLite via conftest.py
     if not os.environ.get("TESTING"):
-        init_db(app)
+        db_host = os.environ.get("DATABASE_HOST", "localhost")
+        db_name = os.environ.get("DATABASE_NAME", "hackathon_db")
+        db_port = os.environ.get("DATABASE_PORT", "5432")
+        db_user = os.environ.get("DATABASE_USER", "postgres")
+
+        _log_startup_event("INFO", "Initializing database connection",
+                           db_host=db_host,
+                           db_name=db_name,
+                           db_port=db_port,
+                           db_user=db_user,
+                           db_password_set=bool(os.environ.get("DATABASE_PASSWORD")))
+
+        try:
+            init_db(app)
+            _log_startup_event("INFO", "Database proxy initialized successfully")
+        except Exception as e:
+            _log_startup_event("ERROR", "Failed to initialize database proxy",
+                               error_type=type(e).__name__,
+                               error_message=str(e),
+                               traceback=traceback.format_exc())
 
         from app.models.user import User
         from app.models.url import Url
@@ -31,8 +74,13 @@ def create_app():
         # Wrapped in try/except so app can start even without DB (for /health checks)
         try:
             db.create_tables([User, Url, Event], safe=True)
+            _log_startup_event("INFO", "Database tables created/verified successfully")
         except Exception as e:
-            print(f"Warning: Could not create tables (DB may be unavailable): {e}")
+            _log_startup_event("WARNING", "Could not create tables - database may be unavailable",
+                               error_type=type(e).__name__,
+                               error_message=str(e),
+                               traceback=traceback.format_exc(),
+                               note="App will continue - /health will work, /ready will return 503")
 
     attach_request_id_handlers(app)
     app.before_request(before_request_metrics)
@@ -93,5 +141,9 @@ def create_app():
             return jsonify(status="ready", database="connected"), 200
         except Exception:
             return jsonify(status="not ready", database="disconnected"), 503
+
+    _log_startup_event("INFO", "Application startup complete",
+                       routes_registered=len(app.url_map._rules),
+                       testing_mode=bool(os.environ.get("TESTING")))
 
     return app
