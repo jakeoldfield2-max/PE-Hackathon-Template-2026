@@ -1,5 +1,5 @@
 import streamlit as st
-from app.ui.helpers import api
+from ui.helpers import api
 
 def render_tab_urls(BASE):
     st.markdown('<div class="section-label">— all short links</div>', unsafe_allow_html=True)

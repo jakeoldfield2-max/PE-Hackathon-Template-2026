@@ -1,6 +1,6 @@
 import streamlit as st
 import json
-from app.ui.helpers import api
+from ui.helpers import api
 
 def render_tab_manage(BASE):
     st.markdown('<div class="section-label">— update url</div>', unsafe_allow_html=True)
