@@ -7,72 +7,51 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-
-    env:
-      FLASK_DEBUG: "false"
-      DATABASE_NAME: postgres
-      DATABASE_HOST: ${{ secrets.SUPABASE_HOST }}
-      DATABASE_PORT: "5432"
-      DATABASE_USER: ${{ secrets.SUPABASE_USER }}
-      DATABASE_PASSWORD: ${{ secrets.SUPABASE_PASSWORD }}
-
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v4
 
       - name: Install dependencies
-        run: uv sync
+        run: uv sync --dev
 
-      - name: Verify Database Connection
+      - name: Run tests with coverage (min 70%)
         run: |
-          echo "=========================================="
-          echo "DATABASE CONNECTION CHECK"
-          echo "=========================================="
-          uv run python -c "
-          from dotenv import load_dotenv
-          load_dotenv()
-          from app.database import db, init_db
-          from flask import Flask
+          uv run pytest \
+            --cov=app \
+            --cov-report=term-missing \
+            --cov-report=xml:coverage.xml \
+            --cov-fail-under=70
 
-          app = Flask(__name__)
-          init_db(app)
-          db.connect()
-          print('[OK] Connected to Supabase')
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage.xml
 
-          # Verify test schema exists
-          cursor = db.execute_sql(\"SELECT schema_name FROM information_schema.schemata WHERE schema_name = 'test';\")
-          if cursor.fetchone():
-              print('[OK] Test schema exists')
-          else:
-              print('[FAIL] Test schema not found!')
-              exit(1)
-          db.close()
-          "
+  docker-build:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
 
-      - name: Run Application Tests (tests/)
+      - name: Build Docker image
+        run: docker build -t urlpulse:ci .
+
+      - name: Smoke test image can boot Flask app
         run: |
-          echo "=========================================="
-          echo "APPLICATION TESTS"
-          echo "=========================================="
-          uv run pytest tests/ -v
+          docker run --rm \
+            urlpulse:ci \
+            uv run python -c "from run import app; print(app.url_map)"
 
-      - name: Run Database Function Tests (Test_Functions/)
+  deploy:
+    runs-on: ubuntu-latest
+    needs: [test, docker-build]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - name: Validate GitHub Actions context
         run: |
-          echo "=========================================="
-          echo "DATABASE FUNCTION TESTS"
-          echo "=========================================="
-          echo "Testing against Supabase test schema"
-          echo "Schema check runs automatically"
-          echo "=========================================="
-          uv run pytest Test_Functions/ -v -s
+          test -n "${{ github.repository }}"
+          test -n "${{ github.ref }}"
 
-      - name: Test Summary
-        if: always()
-        run: |
-          echo "=========================================="
-          echo "TEST SUMMARY"
-          echo "=========================================="
-          echo "Database: Supabase (test schema)"
-          echo "Application tests: tests/"
-          echo "Database function tests: Test_Functions/"
-          echo "=========================================="
+      - name: Deploy placeholder
+        run: echo "Deploy would run here (blocked unless test and docker-build pass)."
