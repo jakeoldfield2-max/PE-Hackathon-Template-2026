@@ -56,7 +56,7 @@ def render_tab_shorten(BASE, user_map):
                     f'<div class="result-box">'
                     f'<div class="result-label">short link created</div>'
                     f'<div class="result-link">{short_link}</div>'
-                    f'<div style="font-family:JetBrains Mono,monospace;font-size:0.72rem;color:#2e7040;margin-top:0.3rem;">'
+                    f'<div style="font-family:JetBrains Mono,monospace;font-size:0.72rem;color:var(--accent);margin-top:0.3rem;opacity:0.8;">'
                     f'→ {dest[:80]}{"…" if len(dest)>80 else ""}</div>'
                     f'</div>',
                     unsafe_allow_html=True,
