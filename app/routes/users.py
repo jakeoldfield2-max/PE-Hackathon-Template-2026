@@ -3,6 +3,7 @@ from datetime import datetime
 from flask import Blueprint, jsonify, request
 from playhouse.shortcuts import model_to_dict
 
+from app.cache import cache_get, cache_set, cache_delete_pattern
 from app.models.user import User
 
 users_bp = Blueprint("users", __name__)
@@ -22,20 +23,19 @@ def create_user():
     if not username or not email:
         return jsonify(error="username and email are required"), 400
 
-    # Check if username already exists
     if User.select().where(User.username == username).exists():
         return jsonify(error="Username already exists"), 409
 
-    # Check if email already exists
     if User.select().where(User.email == email).exists():
         return jsonify(error="Email already exists"), 409
 
-    # Create the new user
     user = User.create(
         username=username,
         email=email,
         created_at=datetime.now()
     )
+
+    cache_delete_pattern("users:*")
 
     return jsonify(model_to_dict(user)), 201
 
@@ -43,15 +43,28 @@ def create_user():
 @users_bp.route("/users", methods=["GET"])
 def list_users():
     """List all users."""
+    cached = cache_get("users:list")
+    if cached is not None:
+        return jsonify(cached), 200, {"X-Cache": "HIT"}
+
     users = User.select().order_by(User.id)
-    return jsonify([model_to_dict(u) for u in users])
+    result = [model_to_dict(u) for u in users]
+    cache_set("users:list", result, ttl=10)
+
+    return jsonify(result), 200, {"X-Cache": "MISS"}
 
 
 @users_bp.route("/users/<int:user_id>", methods=["GET"])
 def get_user(user_id):
     """Get a specific user by ID."""
+    cached = cache_get(f"users:{user_id}")
+    if cached is not None:
+        return jsonify(cached), 200, {"X-Cache": "HIT"}
+
     try:
         user = User.get_by_id(user_id)
-        return jsonify(model_to_dict(user))
+        result = model_to_dict(user)
+        cache_set(f"users:{user_id}", result, ttl=10)
+        return jsonify(result), 200, {"X-Cache": "MISS"}
     except User.DoesNotExist:
         return jsonify(error="User not found"), 404

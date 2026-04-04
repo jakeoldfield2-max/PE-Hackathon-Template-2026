@@ -60,13 +60,39 @@ Observability:
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `GET` | `/health` | Liveness check |
+| `GET` | `/health` | Liveness check — is the process alive? |
+| `GET` | `/ready` | Readiness check — is the DB connected? |
+| `GET` | `/stats` | System overview (users, URLs, events) |
+| `POST` | `/seed` | Populate demo data (idempotent) |
 | `POST` | `/users` | Create a user |
 | `GET` | `/users` | List all users |
 | `GET` | `/users/<id>` | Get user by ID |
 | `POST` | `/shorten` | Create a shortened URL |
 | `POST` | `/update` | Update a URL |
 | `POST` | `/delete` | Delete a URL |
+
+## Quick Start (Docker)
+
+```bash
+# 1. Configure environment
+cp .env.example .env
+# Edit .env — uncomment "Option C: Docker Compose" and set passwords
+
+# 2. Start everything (3 app instances, Nginx, PostgreSQL, Redis)
+docker compose up -d --build
+
+# 3. Seed demo data
+curl -X POST http://localhost/seed
+
+# 4. Verify
+curl http://localhost/health    # → {"status":"ok"}
+curl http://localhost/ready     # → {"status":"ready","database":"connected"}
+curl http://localhost/stats     # → {"total_users":3,"total_urls":10,...}
+curl http://localhost/users     # → cached response (check X-Cache header)
+
+# 5. View logs
+docker compose logs -f
+```
 
 ## Running Locally (No Docker)
 
@@ -96,10 +122,14 @@ curl http://localhost:5000/health
 # → {"status":"ok"}
 ```
 
-### Running Tests
+## Running Tests
 
 ```bash
-uv run pytest --cov=app --cov-fail-under=70
+# Run all tests (uses SQLite in-memory — no DB needed)
+uv run pytest tests/ -v
+
+# Run with coverage (70% minimum required for CI)
+uv run pytest tests/ --cov=app --cov-fail-under=70
 ```
 
 ## Project Structure
@@ -107,17 +137,36 @@ uv run pytest --cov=app --cov-fail-under=70
 ```
 urlpulse/
 ├── app/
-│   ├── __init__.py          # App factory
+│   ├── __init__.py          # App factory + health/ready/error handlers
+│   ├── cache.py             # Redis caching with graceful degradation
 │   ├── database.py          # DB connection + BaseModel
 │   ├── models/
 │   │   ├── user.py          # User model
 │   │   ├── url.py           # Url model
 │   │   └── event.py         # Event model
 │   └── routes/
-│       ├── users.py         # User CRUD
+│       ├── seed.py          # POST /seed — demo data
+│       ├── stats.py         # GET /stats — system overview
+│       ├── users.py         # User CRUD (cached)
 │       └── url_actions/     # URL shorten/update/delete
-├── .env.example
+├── nginx/
+│   └── nginx.conf           # Round-robin load balancer config
+├── tests/                   # pytest suite (SQLite in-memory)
+├── docs/                    # Architecture, decisions, runbooks
+├── .env.example             # Config template (local, Supabase, or Docker)
+├── Dockerfile               # Python 3.13 + Gunicorn
+├── docker-compose.yml       # Full stack (3 apps, Nginx, PG, Redis)
 ├── pyproject.toml
 ├── run.py
 └── README.md
 ```
+
+## Documentation
+
+| Doc | What it covers |
+|-----|---------------|
+| [docs/DECISIONS.md](docs/DECISIONS.md) | Technical choices with rationale (GCP, Nginx, Redis, etc.) |
+| [docs/CAPACITY.md](docs/CAPACITY.md) | Load test results, bottleneck analysis, scaling roadmap |
+| [docs/FAILURE_MODES.md](docs/FAILURE_MODES.md) | What breaks, impact, and how the system recovers |
+| [docs/INCIDENT_POSTMORTEM.md](docs/INCIDENT_POSTMORTEM.md) | INC-001: Redis OOM cache miss storm |
+| [docs/FEATURES.md](docs/FEATURES.md) | Every feature mapped to its hackathon quest |

@@ -3,6 +3,7 @@ import json
 
 from flask import Blueprint, jsonify, request
 
+from app.cache import cache_delete_pattern
 from app.models.user import User
 from app.models.url import Url
 from app.models.event import Event
@@ -61,6 +62,8 @@ def delete_url():
 
     # Delete the URL
     url.delete_instance()
+
+    cache_delete_pattern("urls:*")
 
     return jsonify({
         "message": "URL deleted successfully",
