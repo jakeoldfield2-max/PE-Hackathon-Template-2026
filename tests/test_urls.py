@@ -91,3 +91,19 @@ def test_delete_url_not_found(client):
         "title": "NonExistent",
     })
     assert response.status_code == 404
+
+
+def test_list_urls(client):
+    user_id = _create_user(client)
+    client.post("/shorten", json={
+        "user_id": user_id,
+        "original_url": "https://example.com/list",
+        "title": "List test",
+    })
+
+    response = client.get("/urls")
+    assert response.status_code == 200
+    data = response.get_json()
+    assert isinstance(data, dict)
+    assert "urls" in data
+    assert len(data["urls"]) >= 1

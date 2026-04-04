@@ -1,6 +1,7 @@
 from datetime import datetime
 
 from flask import Blueprint, jsonify, request
+from peewee import IntegrityError
 from playhouse.shortcuts import model_to_dict
 
 from app.cache import cache_get, cache_set, cache_delete_pattern
@@ -29,11 +30,15 @@ def create_user():
     if User.select().where(User.email == email).exists():
         return jsonify(error="Email already exists"), 409
 
-    user = User.create(
-        username=username,
-        email=email,
-        created_at=datetime.now()
-    )
+    try:
+        user = User.create(
+            username=username,
+            email=email,
+            created_at=datetime.now()
+        )
+    except IntegrityError:
+        # Race condition: another request created the same user between check and insert
+        return jsonify(error="Username or email already exists"), 409
 
     cache_delete_pattern("users:*")
 
@@ -42,18 +47,33 @@ def create_user():
 
 @users_bp.route("/users", methods=["GET"])
 def list_users():
-    """List users (paginated for production)."""
-    limit = request.args.get("limit", default=100, type=int)
+    """List all users with pagination."""
+    # Parse pagination parameters
+    limit = request.args.get("limit", default=50, type=int)
     offset = request.args.get("offset", default=0, type=int)
-    limit = min(limit, 500)
-    
+
+    # Enforce max limit
+    limit = min(limit, 100)
+
     cache_key = f"users:list:{limit}:{offset}"
     cached = cache_get(cache_key)
     if cached is not None:
         return jsonify({"users": cached, "limit": limit, "offset": offset}), 200, {"X-Cache": "HIT"}
 
-    users = User.select().order_by(User.id.desc()).limit(limit).offset(offset)
-    result = [model_to_dict(u) for u in users]
+    # Get total count and paginated users
+    total = User.select().count()
+    users = User.select().order_by(User.id).limit(limit).offset(offset)
+    users_list = [model_to_dict(u) for u in users]
+
+    result = {
+        "users": users_list,
+        "pagination": {
+            "limit": limit,
+            "offset": offset,
+            "total": total,
+            "has_more": offset + len(users_list) < total
+        }
+    }
     cache_set(cache_key, result, ttl=10)
 
     return jsonify({"users": result, "limit": limit, "offset": offset}), 200, {"X-Cache": "MISS"}

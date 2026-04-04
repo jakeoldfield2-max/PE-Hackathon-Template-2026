@@ -58,6 +58,7 @@ services:
       - app-1
       - app-2
       - app-3
+      - ui
 
   # --- Observability ---
   prometheus:
@@ -130,6 +131,15 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+
+  # --- Frontend (Streamlit UI) ---
+  ui:
+    build: .
+    container_name: urlpulse-ui
+    restart: always
+    command: ["uv", "run", "streamlit", "run", "app/ui_app.py", "--server.port=8501", "--server.address=0.0.0.0", "--server.headless=true"]
+    depends_on:
+      - app-1
 
   # --- Database ---
   postgres:
