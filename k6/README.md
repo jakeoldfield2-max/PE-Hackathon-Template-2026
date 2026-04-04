@@ -11,7 +11,7 @@
 | `user-signup.js` | Simulates users creating accounts | 50 | Ready |
 | `user-and-url.js` | Simulates users signing up and shortening a URL | 50 | Ready |
 | `url-lifecycle.js` | Full URL lifecycle: create → edit → delete | 50 | Ready |
-| `url-redirect.js` | Simulates users clicking shortened URLs | - | Planned |
+| `url-resolve.js` | Create URL, then 5 concurrent requests to resolve it | 50 | Ready |
 
 ---
 
@@ -100,6 +100,37 @@ k6 run k6/url-lifecycle.js
 - Error rate < 1%
 
 **Note:** URLs are deleted during the test itself, so only test users remain for cleanup.
+
+---
+
+## url-resolve.js
+
+Simulates creating a URL and then multiple concurrent requests to resolve it (like a viral link being clicked by many users at once).
+
+**What it does:**
+1. `POST /users` - Creates a new user account
+2. `POST /shorten` - Creates a shortened URL, receives `short_code`
+3. `GET /<short_code>/info` (x5 concurrent) - Resolves the short URL to get original URL
+4. Sleeps, then repeats
+
+**Configuration (edit at top of file):**
+```javascript
+const VIRTUAL_USERS = 50;              // Concurrent users
+const TEST_DURATION = '1m';            // Test length
+const BASE_URL = 'http://localhost';   // Target server
+const CONCURRENT_RESOLVES = 5;         // Concurrent resolve requests per URL
+```
+
+**Run:**
+```bash
+k6 run k6/url-resolve.js
+```
+
+**Success criteria:**
+- 95th percentile latency < 300ms
+- Error rate < 1%
+
+**Note:** This test uses `http.batch()` to send 5 requests simultaneously, simulating concurrent access to a popular short link.
 
 ---
 
