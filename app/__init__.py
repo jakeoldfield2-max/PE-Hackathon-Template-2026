@@ -1,3 +1,5 @@
+import os
+
 from dotenv import load_dotenv
 from flask import Flask, jsonify
 
@@ -17,14 +19,16 @@ def create_app():
 
     app = Flask(__name__)
 
-    init_db(app)
+    # Skip PostgreSQL init in test mode - tests use SQLite via conftest.py
+    if not os.environ.get("TESTING"):
+        init_db(app)
 
-    from app.models.user import User
-    from app.models.url import Url
-    from app.models.event import Event
+        from app.models.user import User
+        from app.models.url import Url
+        from app.models.event import Event
 
-    # Create tables if they don't exist
-    db.create_tables([User, Url, Event], safe=True)
+        # Create tables if they don't exist
+        db.create_tables([User, Url, Event], safe=True)
 
     attach_request_id_handlers(app)
     app.before_request(before_request_metrics)

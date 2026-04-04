@@ -103,15 +103,33 @@ services:
     restart: always
     ports:
       - "9093:9093"
-    environment:
-      - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL:?set DISCORD_WEBHOOK_URL in .env}
     volumes:
       - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
-    entrypoint:
-      - "/bin/sh"
-      - "-c"
     command:
-      - "sed 's|__DISCORD_WEBHOOK_URL__|'$${DISCORD_WEBHOOK_URL}'|g' /etc/alertmanager/alertmanager.yml > /tmp/alertmanager.yml && /bin/alertmanager --config.file=/tmp/alertmanager.yml"
+      - "--config.file=/etc/alertmanager/alertmanager.yml"
+    depends_on:
+      - discord-webhook
+
+  discord-webhook:
+    image: python:3.13-slim
+    container_name: urlpulse-discord-webhook
+    restart: always
+    ports:
+      - "9095:9095"
+    environment:
+      - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL:?set DISCORD_WEBHOOK_URL in .env}
+      # Database config - uses local PostgreSQL by default, or set DATABASE_URL for Supabase
+      - DATABASE_URL=${DATABASE_URL:-}
+      - DB_HOST=postgres
+      - DB_NAME=${POSTGRES_DB:-hackathon_db}
+      - DB_USER=${POSTGRES_USER:-postgres}
+      - DB_PASS=${POSTGRES_PASSWORD}
+    volumes:
+      - ./alertmanager/webhook-adapter.py:/app/webhook-adapter.py:ro
+    command: ["sh", "-c", "pip install psycopg2-binary -q && python /app/webhook-adapter.py"]
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   # --- Database ---
   postgres:

@@ -1,6 +1,10 @@
+import os
 import pytest
 import time
 from peewee import SqliteDatabase
+
+# Set TESTING before importing app to skip PostgreSQL initialization
+os.environ["TESTING"] = "1"
 
 from app import create_app
 from app import cache as cache_module
