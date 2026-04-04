@@ -236,12 +236,16 @@ k6 run --env BASE_URL=http://$VM_IP tests/load/baseline.js   # 50 VUs
 k6 run --env BASE_URL=http://$VM_IP tests/load/scale.js      # 200 VUs
 k6 run --env BASE_URL=http://$VM_IP tests/load/tsunami.js    # 500 VUs
 
-# Chaos tests (break things, prove recovery)
+# Chaos tests — local (against local Docker stack)
 ./scripts/chaos.sh kill-one      # Kill 1 instance, verify 2 still serve
-./scripts/chaos.sh kill-db       # Show /health vs /ready difference
-./scripts/chaos.sh kill-redis    # Verify graceful degradation
-./scripts/chaos.sh error-flood   # Trigger HighErrorRate alert → Discord
 ./scripts/chaos.sh full-demo     # Run all chaos tests sequentially
+
+# Chaos tests — remote (against hosted VM via gcloud SSH)
+./scripts/chaos.sh --remote kill-one      # Kill 1 instance on VM
+./scripts/chaos.sh --remote kill-db       # Show /health vs /ready difference
+./scripts/chaos.sh --remote kill-redis    # Verify graceful degradation
+./scripts/chaos.sh --remote error-flood   # Trigger HighErrorRate alert → Discord
+./scripts/chaos.sh --remote full-demo     # Run all chaos tests on VM
 ```
 
 See [docs/LOAD_AND_CHAOS.md](docs/LOAD_AND_CHAOS.md) for the full guide — tier breakdowns, what each test proves, recommended demo order, and how to interpret results.

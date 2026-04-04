@@ -83,31 +83,39 @@ If tests fail, see [CAPACITY.md](CAPACITY.md) for bottleneck analysis and scalin
 
 Break the system on purpose to prove it recovers. All tests auto-recover — containers have `restart: always`.
 
-### Setup
+### Local vs Remote
+
+The chaos script supports two modes:
 
 ```bash
-# Set target
-export BASE_URL=http://localhost   # Local Docker
-# or
-export BASE_URL=http://$VM_IP      # Hosted VM
+# Local — runs docker commands directly against your local Docker stack
+./scripts/chaos.sh kill-one
+./scripts/chaos.sh full-demo
+
+# Remote — SSHes into the GCP VM for docker commands, curls the VM IP
+./scripts/chaos.sh --remote kill-one
+./scripts/chaos.sh --remote full-demo
 ```
+
+**Important:** Without `--remote`, all chaos tests (including `error-flood`) target `http://localhost`. If you want to trigger alerts on the hosted VM, you **must** use `--remote`. Running locally only affects your local stack and won't trigger Discord alerts on the hosted VM.
 
 ### Individual Tests
 
 | Command | What Breaks | What to Expect |
 |---------|-------------|----------------|
-| `./scripts/chaos.sh kill-one` | 1 of 3 app instances | Other 2 keep serving — `/health` still returns 200 |
-| `./scripts/chaos.sh kill-db` | PostgreSQL | `/health` = 200 (alive), `/ready` = 503 (not ready) |
-| `./scripts/chaos.sh kill-redis` | Redis cache | App still works, just slower — serves from DB directly |
-| `./scripts/chaos.sh error-flood` | Sends 200 bad requests | Triggers HighErrorRate alert → Discord (~60s) |
-| `./scripts/chaos.sh kill-all` | All 3 app instances | Total outage → ServiceDown alert on Discord (~60-90s) |
+| `./scripts/chaos.sh [--remote] kill-one` | 1 of 3 app instances | Other 2 keep serving — `/health` still returns 200 |
+| `./scripts/chaos.sh [--remote] kill-db` | PostgreSQL | `/health` = 200 (alive), `/ready` = 503 (not ready) |
+| `./scripts/chaos.sh [--remote] kill-redis` | Redis cache | App still works, just slower — serves from DB directly |
+| `./scripts/chaos.sh [--remote] error-flood` | Sends 200 bad requests | Triggers HighErrorRate alert → Discord (~60s) |
+| `./scripts/chaos.sh [--remote] kill-all` | All 3 app instances | Total outage → ServiceDown alert on Discord (~60-90s) |
 
 ### Full Demo
 
 Runs all chaos tests sequentially with colored output (~3 minutes):
 
 ```bash
-./scripts/chaos.sh full-demo
+./scripts/chaos.sh full-demo            # Local
+./scripts/chaos.sh --remote full-demo   # Remote VM
 ```
 
 **Demo flow:** kill instance → kill Redis → kill DB → error flood.
