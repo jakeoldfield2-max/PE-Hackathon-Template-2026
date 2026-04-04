@@ -28,7 +28,11 @@ def create_app():
         from app.models.event import Event
 
         # Create tables if they don't exist
-        db.create_tables([User, Url, Event], safe=True)
+        # Wrapped in try/except so app can start even without DB (for /health checks)
+        try:
+            db.create_tables([User, Url, Event], safe=True)
+        except Exception as e:
+            print(f"Warning: Could not create tables (DB may be unavailable): {e}")
 
     attach_request_id_handlers(app)
     app.before_request(before_request_metrics)
