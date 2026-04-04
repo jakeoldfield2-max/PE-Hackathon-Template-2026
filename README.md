@@ -224,23 +224,27 @@ curl http://$VM_IP/stats
 # Grafana:      http://$VM_IP:3000
 # Prometheus:   http://$VM_IP:9090
 # Alertmanager: http://$VM_IP:9093
-
-# Load tests against hosted app
-k6 run --env BASE_URL=http://$VM_IP tests/load/baseline.js   # Bronze (50 VUs)
-k6 run --env BASE_URL=http://$VM_IP tests/load/scale.js      # Silver (200 VUs)
-k6 run --env BASE_URL=http://$VM_IP tests/load/tsunami.js    # Gold (500 VUs)
 ```
 
-## Chaos Engineering
+## Load Testing & Chaos Engineering
 
 ```bash
+# Install k6: brew install k6
+
+# Load tests (run in order — Bronze → Silver → Gold)
+k6 run --env BASE_URL=http://$VM_IP tests/load/baseline.js   # 50 VUs
+k6 run --env BASE_URL=http://$VM_IP tests/load/scale.js      # 200 VUs
+k6 run --env BASE_URL=http://$VM_IP tests/load/tsunami.js    # 500 VUs
+
+# Chaos tests (break things, prove recovery)
 ./scripts/chaos.sh kill-one      # Kill 1 instance, verify 2 still serve
-./scripts/chaos.sh kill-all      # Kill all instances, wait for Discord alert
-./scripts/chaos.sh error-flood   # Trigger HighErrorRate alert
 ./scripts/chaos.sh kill-db       # Show /health vs /ready difference
-./scripts/chaos.sh kill-redis    # Verify graceful degradation without cache
+./scripts/chaos.sh kill-redis    # Verify graceful degradation
+./scripts/chaos.sh error-flood   # Trigger HighErrorRate alert → Discord
 ./scripts/chaos.sh full-demo     # Run all chaos tests sequentially
 ```
+
+See [docs/LOAD_AND_CHAOS.md](docs/LOAD_AND_CHAOS.md) for the full guide — tier breakdowns, what each test proves, recommended demo order, and how to interpret results.
 
 ## Documentation
 
@@ -248,6 +252,7 @@ k6 run --env BASE_URL=http://$VM_IP tests/load/tsunami.js    # Gold (500 VUs)
 |-----|---------------|
 | [docs/DEPLOY.md](docs/DEPLOY.md) | GCP VM setup, CI deploy, rollback procedures |
 | [docs/DECISIONS.md](docs/DECISIONS.md) | Technical choices with rationale (GCP, Nginx, Redis, etc.) |
+| [docs/LOAD_AND_CHAOS.md](docs/LOAD_AND_CHAOS.md) | Load testing guide, chaos engineering demo, recommended demo order |
 | [docs/CAPACITY.md](docs/CAPACITY.md) | Load test results, bottleneck analysis, scaling roadmap |
 | [docs/FAILURE_MODES.md](docs/FAILURE_MODES.md) | What breaks, impact, and how the system recovers |
 | [docs/INCIDENT_POSTMORTEM.md](docs/INCIDENT_POSTMORTEM.md) | INC-001: Redis OOM cache miss storm |
