@@ -103,12 +103,11 @@ def test_delete_url_not_found(client):
 
 
 def test_list_urls(client):
-    user_id = _create_user(client)
+    user = _create_user_with_api_key(client, "test7", "test7@example.com")
     client.post("/shorten", json={
-        "user_id": user_id,
         "original_url": "https://example.com/list",
         "title": "List test",
-    })
+    }, headers={"X-API-Key": user["api_key"]})
 
     response = client.get("/urls")
     assert response.status_code == 200
