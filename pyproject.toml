@@ -25,3 +25,9 @@ dev = [
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
+
+[tool.coverage.run]
+omit = [
+    "app/ui_app.py",
+    "app/ui/*"
+]
