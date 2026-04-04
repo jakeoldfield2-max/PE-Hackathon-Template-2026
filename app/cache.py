@@ -133,3 +133,40 @@ def cache_delete_pattern(pattern):
             r.delete(*keys)
     except Exception:
         pass
+
+
+def cache_delete(key):
+    """Delete a specific cache key.
+
+    Args:
+        key: The exact cache key to delete
+    """
+    r = get_redis()
+    if r is None:
+        return
+    try:
+        r.delete(key)
+    except Exception:
+        pass
+
+
+def cache_delete_url(short_code):
+    """Delete all cache entries for a specific short URL.
+
+    Removes:
+    - url:resolve:{short_code} - The URL resolution cache
+    - clicks:{short_code} - The click count cache
+
+    Args:
+        short_code: The short code of the URL to invalidate
+    """
+    r = get_redis()
+    if r is None:
+        return
+    try:
+        r.delete(
+            f"url:resolve:{short_code}",
+            f"clicks:{short_code}"
+        )
+    except Exception:
+        pass

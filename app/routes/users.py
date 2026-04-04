@@ -93,3 +93,40 @@ def get_user(user_id):
         return jsonify(result), 200, {"X-Cache": "MISS"}
     except User.DoesNotExist:
         return jsonify(error="User not found"), 404
+
+
+@users_bp.route("/users/<int:user_id>/api-key", methods=["POST"])
+def generate_api_key(user_id):
+    """Generate a new API key for a user.
+
+    This replaces any existing API key for the user.
+
+    Path parameter:
+        - user_id: ID of the user to generate key for
+
+    Returns:
+        - api_key: The newly generated API key (format: upk_{token})
+        - user_id: The user's ID
+        - message: Success message
+    """
+    try:
+        user = User.get_by_id(user_id)
+    except User.DoesNotExist:
+        return jsonify(error="User not found"), 404
+
+    # Generate new API key
+    new_api_key = User.generate_api_key()
+
+    # Update user with new key
+    user.api_key = new_api_key
+    user.save()
+
+    # Invalidate user cache
+    cache_delete_pattern(f"users:{user_id}")
+    cache_delete_pattern("users:list:*")
+
+    return jsonify({
+        "api_key": new_api_key,
+        "user_id": user_id,
+        "message": "API key generated successfully. Store this key securely - it cannot be retrieved later."
+    }), 201

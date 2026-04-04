@@ -10,10 +10,10 @@ import time
 class TestURLDelete:
     """Test suite for URL deletion functionality."""
 
-    def test_delete_url_success(self, client, sample_user, sample_url):
+    def test_delete_url_success(self, client, sample_url):
         """Test successful URL deletion."""
         response = client.post('/delete', json={
-            'user_id': sample_user['id'],
+            'user_id': sample_url['user_id'],
             'title': sample_url['title']
         })
 
@@ -24,18 +24,18 @@ class TestURLDelete:
         assert data['deleted_url']['url_id'] == sample_url['id']
         assert 'events_deleted' in data
 
-    def test_delete_url_removes_from_database(self, client, sample_user, sample_url):
+    def test_delete_url_removes_from_database(self, client, sample_url):
         """Test that deleted URL is actually removed from database."""
         # Delete the URL
         response = client.post('/delete', json={
-            'user_id': sample_user['id'],
+            'user_id': sample_url['user_id'],
             'title': sample_url['title']
         })
         assert response.status_code == 200
 
         # Try to delete again - should fail
         response = client.post('/delete', json={
-            'user_id': sample_user['id'],
+            'user_id': sample_url['user_id'],
             'title': sample_url['title']
         })
         assert response.status_code == 404
@@ -82,7 +82,7 @@ class TestURLDelete:
         data = response.get_json()
         assert 'error' in data
 
-    def test_delete_url_wrong_user(self, client, sample_user, sample_url):
+    def test_delete_url_wrong_user(self, client, sample_url):
         """Test deletion fails when user doesn't own the URL."""
         # Create a different user
         timestamp = int(time.time() * 1000)
@@ -102,21 +102,20 @@ class TestURLDelete:
         data = response.get_json()
         assert 'error' in data
 
-    def test_delete_url_deletes_events(self, client, sample_user):
+    def test_delete_url_deletes_events(self, client, sample_user_with_api_key):
         """Test that deleting a URL also deletes its events."""
         timestamp = int(time.time() * 1000)
 
         # Create a URL
         response = client.post('/shorten', json={
-            'user_id': sample_user['id'],
             'original_url': f'https://example.com/event-delete-test/{timestamp}',
             'title': f'Event Delete Test {timestamp}'
-        })
+        }, headers={'X-API-Key': sample_user_with_api_key['api_key']})
         url_data = response.get_json()
 
         # Update it to create more events
         client.post('/update', json={
-            'user_id': sample_user['id'],
+            'user_id': sample_user_with_api_key['id'],
             'url_id': url_data['id'],
             'field': 'title',
             'new_value': 'Updated Event Delete Test'
@@ -124,7 +123,7 @@ class TestURLDelete:
 
         # Delete the URL
         response = client.post('/delete', json={
-            'user_id': sample_user['id'],
+            'user_id': sample_user_with_api_key['id'],
             'title': 'Updated Event Delete Test'
         })
 
