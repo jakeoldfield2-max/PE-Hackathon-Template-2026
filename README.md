@@ -182,7 +182,8 @@ urlpulse/
 ├── scripts/
 │   ├── provision.sh         # One-time GCP VM setup (idempotent)
 │   ├── setup-vm.sh          # Create .env, start app, seed data on VM
-│   └── deploy.sh            # SSH deploy to GCP VM (+ rollback)
+│   ├── deploy.sh            # SSH deploy to GCP VM (+ rollback)
+│   └── chaos.sh             # Chaos engineering (kill instances, DB, Redis)
 ├── docs/                    # Architecture, decisions, deploy guide, runbooks
 ├── .env.example             # Common env schema (Docker baseline + minimal overrides)
 ├── Dockerfile               # Python 3.13 + Gunicorn
@@ -228,6 +229,17 @@ curl http://$VM_IP/stats
 k6 run --env BASE_URL=http://$VM_IP tests/load/baseline.js   # Bronze (50 VUs)
 k6 run --env BASE_URL=http://$VM_IP tests/load/scale.js      # Silver (200 VUs)
 k6 run --env BASE_URL=http://$VM_IP tests/load/tsunami.js    # Gold (500 VUs)
+```
+
+## Chaos Engineering
+
+```bash
+./scripts/chaos.sh kill-one      # Kill 1 instance, verify 2 still serve
+./scripts/chaos.sh kill-all      # Kill all instances, wait for Discord alert
+./scripts/chaos.sh error-flood   # Trigger HighErrorRate alert
+./scripts/chaos.sh kill-db       # Show /health vs /ready difference
+./scripts/chaos.sh kill-redis    # Verify graceful degradation without cache
+./scripts/chaos.sh full-demo     # Run all chaos tests sequentially
 ```
 
 ## Documentation
