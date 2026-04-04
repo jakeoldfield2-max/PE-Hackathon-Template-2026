@@ -81,26 +81,30 @@ cp .env.example .env
 #           GRAFANA_ADMIN_USER, GRAFANA_ADMIN_PASSWORD, DISCORD_WEBHOOK_URL
 # Docker startup fails fast when required secrets are missing.
 
-# 2. Start everything (3 app instances, Nginx, PostgreSQL, Redis)
+# 2. Start backend (3 app instances, Nginx, PostgreSQL, Redis, Prometheus, Grafana)
 docker compose up -d --build
 
 # 3. Seed demo data
 curl -X POST http://localhost/seed
 
-# 4. Verify
+# 4. Start frontend (Streamlit UI — runs outside Docker)
+uv run streamlit run app/ui_app.py
+# UI opens at http://localhost:8501
+
+# 5. Verify backend
 curl http://localhost/health    # → {"status":"ok"}
 curl http://localhost/ready     # → {"status":"ready","database":"connected"}
 curl http://localhost/stats     # → {"total_users":3,"total_urls":10,...}
 curl http://localhost/users     # → cached response (check X-Cache header)
-
-# 5. View logs
-docker compose logs -f
 ```
 
-Quick checks:
-
-- Docker mode: http://localhost/health
-- Local mode: http://localhost:5000/health
+| Service | URL |
+|---------|-----|
+| Backend API (via Nginx) | http://localhost |
+| Streamlit UI | http://localhost:8501 |
+| Grafana | http://localhost:3000 |
+| Prometheus | http://localhost:9090 |
+| Alertmanager | http://localhost:9093 |
 
 ## Security Notes
 
@@ -123,29 +127,24 @@ uv sync
 
 # 2. Configure environment
 cp .env.example .env
-
-# For local app run (no Docker), override only these values in .env:
+# Override these values in .env:
 #   DATABASE_HOST=localhost
 #   REDIS_HOST=localhost
-#   POSTGRES_* can stay as-is (only used by docker-compose)
 # For Supabase, replace DATABASE_* values with Supabase credentials.
-# Make sure PostgreSQL is running locally if you are not using Supabase:
+# For local PostgreSQL:
 #   brew install postgresql@16 && brew services start postgresql@16
 #   createdb hackathon_db
 
-# 3. Run the server
+# 3. Start backend API
 uv run run.py
-# Server starts at http://localhost:5000
+# Backend starts at http://localhost:5000
 
-# 3.1 Main local endpoints
-#   App root:        http://localhost:5000
-#   Health:          http://localhost:5000/health
-#   Readiness:       http://localhost:5000/ready
-#   Metrics:         http://localhost:5000/metrics
+# 4. Start frontend (in a separate terminal)
+uv run streamlit run app/ui_app.py
+# UI opens at http://localhost:8501
 
-# 4. Verify it's working
-curl http://localhost:5000/health
-# → {"status":"ok"}
+# 5. Verify
+curl http://localhost:5000/health   # → {"status":"ok"}
 ```
 
 ## Running Tests
@@ -166,6 +165,8 @@ urlpulse/
 │   ├── __init__.py          # App factory + health/ready/error handlers
 │   ├── cache.py             # Redis caching with graceful degradation
 │   ├── database.py          # DB connection + BaseModel
+│   ├── ui_app.py            # Streamlit frontend (run separately)
+│   ├── ui/                  # Streamlit components (sidebar, tabs, styles)
 │   ├── models/
 │   │   ├── user.py          # User model
 │   │   ├── url.py           # Url model
