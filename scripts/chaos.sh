@@ -186,6 +186,7 @@ error_flood() {
   pass "Sent $total requests ($error_count were 5xx errors)"
   warn "Check Discord for HighErrorRate alert (should fire soon)..."
   log "Check Prometheus: ${BASE_URL}:9090/alerts"
+  log "Alert will auto-resolve ~1 minute after errors stop"
   echo ""
 }
 
