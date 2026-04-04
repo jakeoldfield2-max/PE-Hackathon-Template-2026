@@ -37,4 +37,4 @@ Thumbs.db
 judging/
 
 # Internal docs (plans, notes)
-docs/PLAN.md
+docs/*
