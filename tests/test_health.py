@@ -27,3 +27,12 @@ def test_405_returns_json(client):
     data = response.get_json()
     assert data["error"] == "Method not allowed"
     assert data["status"] == 405
+
+
+def test_metrics_endpoint_exposes_prometheus_metrics(client):
+    response = client.get("/metrics")
+    assert response.status_code == 200
+    body = response.data.decode("utf-8")
+    assert "http_requests_total" in body
+    assert "http_request_duration_seconds" in body
+    assert "process_resident_memory_bytes" in body
