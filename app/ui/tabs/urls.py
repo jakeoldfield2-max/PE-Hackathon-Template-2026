@@ -47,16 +47,16 @@ def render_tab_urls(BASE):
             urls = sorted(urls, key=lambda u: (not u.get("is_active", True), u.get("short_code","")))
 
         st.markdown(
-            f'<div style="font-family:JetBrains Mono,monospace;font-size:0.68rem;color:#2e2e38;margin-bottom:0.5rem;">'
+            f'<div style="font-family:JetBrains Mono,monospace;font-size:0.68rem;color:var(--text-xdim);margin-bottom:0.5rem;">'
             f'{len(urls)} result{"s" if len(urls)!=1 else ""}</div>',
             unsafe_allow_html=True,
         )
         st.markdown(
             '<div style="display:flex;gap:0.8rem;padding:0 1rem 0.3rem;">'
-            '<span style="font-family:JetBrains Mono,monospace;font-size:0.6rem;color:#2a2a32;letter-spacing:0.12em;min-width:88px;">CODE</span>'
-            '<span style="font-family:JetBrains Mono,monospace;font-size:0.6rem;color:#2a2a32;letter-spacing:0.12em;flex:1;">DESTINATION</span>'
-            '<span style="font-family:JetBrains Mono,monospace;font-size:0.6rem;color:#2a2a32;letter-spacing:0.12em;min-width:100px;text-align:right;">TITLE</span>'
-            '<span style="font-family:JetBrains Mono,monospace;font-size:0.6rem;color:#2a2a32;letter-spacing:0.12em;min-width:50px;text-align:right;">USER</span>'
+            '<span style="font-family:JetBrains Mono,monospace;font-size:0.6rem;color:var(--text-xdim);letter-spacing:0.12em;min-width:88px;">CODE</span>'
+            '<span style="font-family:JetBrains Mono,monospace;font-size:0.6rem;color:var(--text-xdim);letter-spacing:0.12em;flex:1;">DESTINATION</span>'
+            '<span style="font-family:JetBrains Mono,monospace;font-size:0.6rem;color:var(--text-xdim);letter-spacing:0.12em;min-width:100px;text-align:right;">TITLE</span>'
+            '<span style="font-family:JetBrains Mono,monospace;font-size:0.6rem;color:var(--text-xdim);letter-spacing:0.12em;min-width:50px;text-align:right;">USER</span>'
             '</div>',
             unsafe_allow_html=True,
         )

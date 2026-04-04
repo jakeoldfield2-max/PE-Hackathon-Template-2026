@@ -42,10 +42,10 @@ def render_tab_users(BASE):
     else:
         st.markdown(
             '<div style="display:flex;gap:1rem;padding:0 1rem 0.3rem;">'
-            '<span style="font-family:JetBrains Mono,monospace;font-size:0.6rem;color:#2a2a32;letter-spacing:0.12em;min-width:30px;">ID</span>'
-            '<span style="font-family:JetBrains Mono,monospace;font-size:0.6rem;color:#2a2a32;letter-spacing:0.12em;flex:1;">USERNAME</span>'
-            '<span style="font-family:JetBrains Mono,monospace;font-size:0.6rem;color:#2a2a32;letter-spacing:0.12em;flex:2;">EMAIL</span>'
-            '<span style="font-family:JetBrains Mono,monospace;font-size:0.6rem;color:#2a2a32;letter-spacing:0.12em;min-width:130px;text-align:right;">CREATED</span>'
+            '<span style="font-family:JetBrains Mono,monospace;font-size:0.6rem;color:var(--text-xdim);letter-spacing:0.12em;min-width:30px;">ID</span>'
+            '<span style="font-family:JetBrains Mono,monospace;font-size:0.6rem;color:var(--text-xdim);letter-spacing:0.12em;flex:1;">USERNAME</span>'
+            '<span style="font-family:JetBrains Mono,monospace;font-size:0.6rem;color:var(--text-xdim);letter-spacing:0.12em;flex:2;">EMAIL</span>'
+            '<span style="font-family:JetBrains Mono,monospace;font-size:0.6rem;color:var(--text-xdim);letter-spacing:0.12em;min-width:130px;text-align:right;">CREATED</span>'
             '</div>',
             unsafe_allow_html=True,
         )
@@ -59,10 +59,10 @@ def render_tab_users(BASE):
                 except Exception: pass
             st.markdown(
                 f'<div class="url-row">'
-                f'<span style="font-family:JetBrains Mono,monospace;font-size:0.78rem;color:#3d3d45;min-width:30px;">#{uid}</span>'
-                f'<span style="font-family:JetBrains Mono,monospace;font-size:0.85rem;color:#4ade80;flex:1;">@{uname}</span>'
-                f'<span style="font-family:JetBrains Mono,monospace;font-size:0.78rem;color:#6b6b74;flex:2;">{email}</span>'
-                f'<span style="font-family:JetBrains Mono,monospace;font-size:0.7rem;color:#2e2e38;min-width:130px;text-align:right;">{cat}</span>'
+                f'<span style="font-family:JetBrains Mono,monospace;font-size:0.78rem;color:var(--text-xdim);min-width:30px;">#{uid}</span>'
+                f'<span style="font-family:JetBrains Mono,monospace;font-size:0.85rem;color:var(--accent);flex:1;">@{uname}</span>'
+                f'<span style="font-family:JetBrains Mono,monospace;font-size:0.78rem;color:var(--text-dim);flex:2;">{email}</span>'
+                f'<span style="font-family:JetBrains Mono,monospace;font-size:0.7rem;color:var(--text-xdim);min-width:130px;text-align:right;">{cat}</span>'
                 f'</div>',
                 unsafe_allow_html=True,
             )

@@ -2,6 +2,7 @@ import os
 import streamlit as st
 from datetime import datetime
 from app.ui.helpers import api, probe
+from app.ui.styles import get_theme, toggle_theme
 
 def render_sidebar():
     # When running inside Docker, use internal Nginx hostname
@@ -9,11 +10,24 @@ def render_sidebar():
     _default_docker_base = "http://nginx" if _in_docker else "http://localhost"
 
     with st.sidebar:
+        theme = get_theme()
+        is_dark = theme == "dark"
+
+        # --- Brand Header ---
         st.markdown(
-            '<div style="font-family:JetBrains Mono,monospace;font-size:1.2rem;font-weight:700;color:#4ade80;margin-bottom:0.1rem;">URLPulse</div>'
-            '<div style="font-family:JetBrains Mono,monospace;font-size:0.62rem;color:#2e2e38;letter-spacing:0.1em;margin-bottom:1.5rem;">MLH PE HACKATHON 2026</div>',
+            f'<div style="font-family:JetBrains Mono,monospace;font-size:1.2rem;font-weight:700;color:var(--accent);margin-bottom:0.1rem;">URLPulse</div>'
+            f'<div style="font-family:JetBrains Mono,monospace;font-size:0.62rem;color:var(--text-xdim);letter-spacing:0.1em;margin-bottom:1.5rem;">MLH PE HACKATHON 2026</div>',
             unsafe_allow_html=True,
         )
+
+        # --- Theme Toggle ---
+        st.markdown('<div class="section-label">— appearance</div>', unsafe_allow_html=True)
+        toggle_label = "☀️  switch to light" if is_dark else "🌙  switch to dark"
+        if st.button(toggle_label, use_container_width=True, key="theme_toggle_btn"):
+            toggle_theme()
+            st.rerun()
+
+        st.markdown('<hr class="divider">', unsafe_allow_html=True)
 
         st.markdown('<div class="section-label">— backend</div>', unsafe_allow_html=True)
         mode = st.radio("mode", ["Docker  :80", "Local  :5000"], label_visibility="collapsed")
@@ -21,7 +35,7 @@ def render_sidebar():
         custom = st.text_input("CUSTOM BASE URL", value="", placeholder="https://34.x.x.x")
         if custom.strip():
             BASE = custom.strip().rstrip("/")
-        st.markdown(f'<div style="font-family:JetBrains Mono,monospace;font-size:0.7rem;color:#3d3d45;margin-bottom:1rem;">{BASE}</div>', unsafe_allow_html=True)
+        st.markdown(f'<div style="font-family:JetBrains Mono,monospace;font-size:0.7rem;color:var(--text-dim);margin-bottom:1rem;">{BASE}</div>', unsafe_allow_html=True)
 
         st.markdown('<div class="section-label">— status</div>', unsafe_allow_html=True)
         ok_health, _ = probe(BASE, "/health")
@@ -61,7 +75,7 @@ def render_sidebar():
 
         st.markdown('<hr class="divider">', unsafe_allow_html=True)
         st.markdown(
-            f'<div style="font-family:JetBrains Mono,monospace;font-size:0.6rem;color:#28282f;">{datetime.now().strftime("%H:%M:%S")}</div>',
+            f'<div style="font-family:JetBrains Mono,monospace;font-size:0.6rem;color:var(--text-xdim);">{datetime.now().strftime("%H:%M:%S")}</div>',
             unsafe_allow_html=True,
         )
         

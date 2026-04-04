@@ -1,7 +1,10 @@
+import json
+from datetime import datetime
 from flask import Blueprint, redirect, jsonify
 
 from app.cache import cache_get_and_refresh, cache_set
 from app.models.url import Url
+from app.models.event import Event
 
 url_redirect_bp = Blueprint("url_redirect", __name__)
 
@@ -66,6 +69,19 @@ def redirect_to_original(short_code):
 
     if not data["is_active"]:
         return jsonify(error="This URL has been deactivated", short_code=short_code), 410
+
+    # Async logging is preferred, but for now we log synchronously for demo reliability
+    try:
+        Event.create(
+            url_id=data.get("id"), # Use ID from cached data
+            user_id=data.get("user_id_id") or data.get("user_id"), 
+            event_type="visited",
+            timestamp=datetime.now(),
+            details=json.dumps({"short_code": short_code, "original_url": data["original_url"]})
+        )
+    except Exception:
+        # Don't fail the redirect if logging fails
+        pass
 
     return redirect(data["original_url"], code=302)
 

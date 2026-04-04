@@ -28,7 +28,8 @@ def stats():
 
     update_business_metrics(active_urls=active_urls, active_users=active_users)
 
-    event_breakdown = {}
+    # Correct breakdown of events for the dashboard
+    event_breakdown = {"created": 0, "visited": 0}
     for row in (
         Event.select(Event.event_type, fn.COUNT(Event.id).alias("count"))
         .group_by(Event.event_type)
