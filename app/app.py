@@ -1,3 +1,9 @@
+import sys
+from pathlib import Path
+
+# Ensure the project root is on sys.path so 'app' is importable
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 import streamlit as st
 from app.ui.styles import apply_styles
 from app.ui.sidebar import render_sidebar
