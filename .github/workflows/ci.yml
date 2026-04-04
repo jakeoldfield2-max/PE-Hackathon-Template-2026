@@ -48,10 +48,18 @@ jobs:
     needs: [test, docker-build]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
-      - name: Validate GitHub Actions context
-        run: |
-          test -n "${{ github.repository }}"
-          test -n "${{ github.ref }}"
+      - uses: actions/checkout@v4
 
-      - name: Deploy placeholder
-        run: echo "Deploy would run here (blocked unless test and docker-build pass)."
+      - name: Deploy via SSH
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
+        run: |
+          if [ -z "$DEPLOY_HOST" ] || [ -z "$DEPLOY_USER" ] || [ -z "$DEPLOY_KEY" ]; then
+            echo "Deploy secrets not configured — skipping deploy."
+            echo "Set DEPLOY_HOST, DEPLOY_USER, and DEPLOY_KEY in GitHub Secrets."
+            exit 0
+          fi
+          chmod +x scripts/deploy.sh
+          ./scripts/deploy.sh

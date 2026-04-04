@@ -178,7 +178,10 @@ urlpulse/
 ├── nginx/
 │   └── nginx.conf           # Round-robin load balancer config
 ├── tests/                   # pytest suite (SQLite in-memory)
-├── docs/                    # Architecture, decisions, runbooks
+├── scripts/
+│   ├── provision.sh         # One-time GCP VM setup (idempotent)
+│   └── deploy.sh            # SSH deploy to GCP VM (+ rollback)
+├── docs/                    # Architecture, decisions, deploy guide, runbooks
 ├── .env.example             # Common env schema (Docker baseline + minimal overrides)
 ├── Dockerfile               # Python 3.13 + Gunicorn
 ├── docker-compose.yml       # Full stack (3 apps, Nginx, PG, Redis)
@@ -187,10 +190,23 @@ urlpulse/
 └── README.md
 ```
 
+## Deployment
+
+```bash
+./scripts/provision.sh --project pe-hackathon-template-2026  # Safer: explicit project
+./scripts/provision.sh --yes      # Non-interactive mode (CI/automation)
+./scripts/deploy.sh               # Deploy latest main via SSH
+./scripts/deploy.sh --rollback    # Revert last deploy
+```
+
+CI auto-deploys on merge to `main` (blocked unless tests + docker-build pass).
+See [docs/DEPLOY.md](docs/DEPLOY.md) for first-time setup and troubleshooting.
+
 ## Documentation
 
 | Doc | What it covers |
 |-----|---------------|
+| [docs/DEPLOY.md](docs/DEPLOY.md) | GCP VM setup, CI deploy, rollback procedures |
 | [docs/DECISIONS.md](docs/DECISIONS.md) | Technical choices with rationale (GCP, Nginx, Redis, etc.) |
 | [docs/CAPACITY.md](docs/CAPACITY.md) | Load test results, bottleneck analysis, scaling roadmap |
 | [docs/FAILURE_MODES.md](docs/FAILURE_MODES.md) | What breaks, impact, and how the system recovers |
