@@ -65,8 +65,8 @@ jobs:
           fi
           echo "No errors found in logs."
 
-          # Count warnings for summary
-          WARNING_COUNT=$(grep -c '"level": "WARNING"' /tmp/container.log || echo "0")
+          # Count warnings for summary (exclude expected DB warning — smoke test has no PostgreSQL)
+          WARNING_COUNT=$(grep '"level": "WARNING"' /tmp/container.log | grep -v "Database initialization failed" | wc -l | tr -d ' ')
           echo "warning_count=$WARNING_COUNT" >> $GITHUB_OUTPUT
 
       - name: Generate build summary
@@ -76,8 +76,9 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
 
           if [ -f /tmp/container.log ]; then
-            WARNING_COUNT=$(grep -c '"level": "WARNING"' /tmp/container.log || echo "0")
-            ERROR_COUNT=$(grep -c '"level": "ERROR"' /tmp/container.log || echo "0")
+            # Exclude expected DB warning — smoke test runs without PostgreSQL
+            WARNING_COUNT=$(grep '"level": "WARNING"' /tmp/container.log | grep -v "Database initialization failed" | wc -l | tr -d ' ')
+            ERROR_COUNT=$(grep '"level": "ERROR"' /tmp/container.log | wc -l | tr -d ' ')
 
             if [ "$ERROR_COUNT" -gt 0 ]; then
               echo "### ❌ Errors Found: $ERROR_COUNT" >> $GITHUB_STEP_SUMMARY
@@ -94,7 +95,7 @@ jobs:
               echo "<details><summary>View warnings</summary>" >> $GITHUB_STEP_SUMMARY
               echo "" >> $GITHUB_STEP_SUMMARY
               echo '```json' >> $GITHUB_STEP_SUMMARY
-              grep '"level": "WARNING"' /tmp/container.log | head -10 >> $GITHUB_STEP_SUMMARY
+              grep '"level": "WARNING"' /tmp/container.log | grep -v "Database initialization failed" | head -10 >> $GITHUB_STEP_SUMMARY
               echo '```' >> $GITHUB_STEP_SUMMARY
               echo "</details>" >> $GITHUB_STEP_SUMMARY
             fi
