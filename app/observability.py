@@ -1,4 +1,5 @@
 import time
+import sys
 from typing import Dict
 
 from flask import Response, g, request
@@ -24,6 +25,10 @@ REQUEST_DURATION = Histogram(
 
 ACTIVE_URLS_GAUGE = Gauge("urlpulse_active_urls", "Number of active short URLs")
 ACTIVE_USERS_GAUGE = Gauge("urlpulse_active_users", "Number of active users")
+PROCESS_MEMORY_GAUGE = Gauge(
+    "process_resident_memory_bytes",
+    "Resident memory size in bytes",
+)
 
 
 def _endpoint_label() -> str:
@@ -36,9 +41,26 @@ def before_request_metrics() -> None:
     g.request_start_time = time.perf_counter()
 
 
+def _process_resident_memory_bytes() -> int:
+    try:
+        import resource
+
+        rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+        if sys.platform == "darwin":
+            return rss
+        return rss * 1024
+    except Exception:
+        return 0
+
+
+def update_system_metrics() -> None:
+    PROCESS_MEMORY_GAUGE.set(_process_resident_memory_bytes())
+
+
 def after_request_metrics(response: Response) -> Response:
     start_time = getattr(g, "request_start_time", None)
     if start_time is None:
+        update_system_metrics()
         return response
 
     duration = time.perf_counter() - start_time
@@ -53,10 +75,12 @@ def after_request_metrics(response: Response) -> Response:
         endpoint=_endpoint_label(),
         status=str(response.status_code),
     ).inc()
+    update_system_metrics()
     return response
 
 
 def metrics_response() -> Response:
+    update_system_metrics()
     payload = generate_latest()
     return Response(payload, mimetype=CONTENT_TYPE_LATEST)
 
