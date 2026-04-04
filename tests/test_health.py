@@ -24,3 +24,13 @@ def test_ready_check(client):
 def test_404_returns_json(client):
     response = client.get("/nonexistent-route")
     assert response.status_code == 404
+    data = response.get_json()
+    assert data["error"] == "Not found"
+    assert data["status"] == 404
+
+def test_405_returns_json(client):
+    response = client.delete("/health")
+    assert response.status_code == 405
+    data = response.get_json()
+    assert data["error"] == "Method not allowed"
+    assert data["status"] == 405
