@@ -28,7 +28,7 @@ DEMO_URLS = [
     {"original_url": "https://nginx.org/en/docs/", "title": "Nginx Docs"},
     {"original_url": "https://redis.io/docs/", "title": "Redis Docs"},
     {"original_url": "https://www.docker.com/get-started", "title": "Docker Getting Started"},
-    {"original_url": "https://developer.hashicorp.com/terraform", "title": "Terraform Docs"},
+    {"original_url": "https://cloud.google.com/docs", "title": "Google Cloud Docs"},
 ]
 
 

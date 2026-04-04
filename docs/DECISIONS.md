@@ -59,3 +59,11 @@
 | **Chosen** | One shared `.env.example` schema with Docker-first baseline and minimal per-environment overrides |
 | **Alternatives** | Multiple env templates per environment (`.env.docker`, `.env.local`, `.env.supabase`) |
 | **Why** | A single schema reduces onboarding errors and merge drift. Docker baseline lets teammates run quickly, while local/Supabase only require overriding a few keys. Required secret checks in Compose fail fast when critical values are missing, preventing insecure defaults from silently running. |
+
+## #8 — SSH deploy over manual provisioning
+
+| | |
+|---|---|
+| **Chosen** | Manual GCP Compute Engine VM + SSH deploy from CI |
+| **Alternatives** | Manual SSH deploy, Cloud Run, Firebase Hosting |
+| **Why** | Deployment tooling adds 1-2 hours of setup risk (service accounts, IAM, credentials JSON) for zero extra quest points. Judges score app reliability, not IaC. SSH deploy gives identical CI/CD evidence (deploy blocked when tests fail). Firebase Hosting is serverless — hides the infrastructure we need to demonstrate (containers, load balancing, chaos recovery). Cloud Run auto-scales but doesn't show manual scaling decisions. A single VM running Docker Compose is the sweet spot: full control, visible infrastructure, minimal setup time. |

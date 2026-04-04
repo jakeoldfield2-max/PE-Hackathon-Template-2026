@@ -20,7 +20,7 @@ A production-grade URL shortener built to survive chaos. Shorten URLs, track eve
 | **Dashboards** | Grafana | Four Golden Signals visualization | http://localhost:3000 |
 | **Alerting** | Alertmanager → Discord | Automated incident notifications | Alertmanager UI: http://localhost:9093 |
 | **CI/CD** | GitHub Actions | Test → Build → Deploy pipeline | GitHub Actions tab |
-| **Infrastructure** | GCP + Terraform | Reproducible cloud deployment | Cloud VM + static IP |
+| **Infrastructure** | GCP VM + Docker Compose | Reproducible cloud deployment | Cloud VM |
 | **Load Testing** | k6 | Scriptable load tests (50/200/500 users) | CLI |
 | **Package Manager** | uv | Fast Python dependency management | CLI |
 
