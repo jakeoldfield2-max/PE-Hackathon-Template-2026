@@ -30,5 +30,6 @@ CMD ["uv", "run", "gunicorn", \
     "--workers", "4", \
     "--timeout", "30", \
     "--access-logfile", "-", \
+    "--access-logformat", "{\"timestamp\":\"%(t)s\",\"remote_addr\":\"%(h)s\",\"method\":\"%(m)s\",\"path\":\"%(U)s\",\"query\":\"%(q)s\",\"status\":\"%(s)s\",\"response_length\":\"%(B)s\",\"duration_us\":\"%(D)s\",\"user_agent\":\"%(a)s\",\"request_id\":\"%({X-Request-ID}i)s\"}", \
     "--error-logfile", "-", \
     "run:app"]

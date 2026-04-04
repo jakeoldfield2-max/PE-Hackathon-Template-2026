@@ -6,23 +6,23 @@ A production-grade URL shortener built to survive chaos. Shorten URLs, track eve
 
 ## Tech Stack
 
-| Layer | Technology | Why |
-|-------|-----------|-----|
-| **Language** | Python 3.13 | Template default, team familiarity |
-| **Framework** | Flask | Lightweight, hackathon-friendly |
-| **ORM** | Peewee | Simple, DatabaseProxy pattern for connection pooling |
-| **Database** | PostgreSQL 16 | Production-grade relational DB |
-| **Cache** | Redis 7 | In-memory caching with TTL & LRU eviction |
-| **WSGI Server** | Gunicorn | Multi-worker concurrent request handling |
-| **Load Balancer** | Nginx | Round-robin across 3 app instances |
-| **Containerization** | Docker + Docker Compose | Full stack orchestration |
-| **Metrics** | Prometheus | Scrapes /metrics, stores time-series data |
-| **Dashboards** | Grafana | Four Golden Signals visualization |
-| **Alerting** | Alertmanager → Discord | Automated incident notifications |
-| **CI/CD** | GitHub Actions | Test → Build → Deploy pipeline |
-| **Infrastructure** | GCP + Terraform | Reproducible cloud deployment |
-| **Load Testing** | k6 | Scriptable load tests (50/200/500 users) |
-| **Package Manager** | uv | Fast Python dependency management |
+| Layer | Technology | Why | Default Access |
+|-------|-----------|-----|----------------|
+| **Language** | Python 3.13 | Template default, team familiarity | N/A |
+| **Framework** | Flask | Lightweight, hackathon-friendly | Local: http://localhost:5000 |
+| **ORM** | Peewee | Simple, DatabaseProxy pattern for connection pooling | N/A |
+| **Database** | PostgreSQL 16 | Production-grade relational DB | Internal: 5432 |
+| **Cache** | Redis 7 | In-memory caching with TTL & LRU eviction | Internal: 6379 |
+| **WSGI Server** | Gunicorn | Multi-worker concurrent request handling | Internal app port: 5000 |
+| **Load Balancer** | Nginx | Round-robin across 3 app instances | Docker API: http://localhost (80) |
+| **Containerization** | Docker + Docker Compose | Full stack orchestration | `docker compose up -d --build` |
+| **Metrics** | Prometheus | Scrapes /metrics, stores time-series data | http://localhost:9090 |
+| **Dashboards** | Grafana | Four Golden Signals visualization | http://localhost:3000 |
+| **Alerting** | Alertmanager → Discord | Automated incident notifications | Alertmanager UI: http://localhost:9093 |
+| **CI/CD** | GitHub Actions | Test → Build → Deploy pipeline | GitHub Actions tab |
+| **Infrastructure** | GCP + Terraform | Reproducible cloud deployment | Cloud VM + static IP |
+| **Load Testing** | k6 | Scriptable load tests (50/200/500 users) | CLI |
+| **Package Manager** | uv | Fast Python dependency management | CLI |
 
 ## Architecture
 
@@ -76,7 +76,10 @@ Observability:
 ```bash
 # 1. Configure environment
 cp .env.example .env
-# Edit .env — uncomment "Option C: Docker Compose" and set passwords
+# Edit placeholders in .env using the Common Standard profile values.
+# Required: DATABASE_PASSWORD, POSTGRES_PASSWORD,
+#           GRAFANA_ADMIN_USER, GRAFANA_ADMIN_PASSWORD, DISCORD_WEBHOOK_URL
+# Docker startup fails fast when required secrets are missing.
 
 # 2. Start everything (3 app instances, Nginx, PostgreSQL, Redis)
 docker compose up -d --build
@@ -94,28 +97,51 @@ curl http://localhost/users     # → cached response (check X-Cache header)
 docker compose logs -f
 ```
 
+Quick checks:
+
+- Docker mode: http://localhost/health
+- Local mode: http://localhost:5000/health
+
+## Security Notes
+
+- Do not hardcode passwords, tokens, or webhook URLs in code or docker-compose.
+- Keep all secrets in .env (already ignored by git) and treat .env.example as schema only.
+- Rotate any secret immediately if it was ever committed or shared.
+
+## Environment Standard
+
+- Single env schema: one shared .env.example used by all environments.
+- Docker-first defaults: the baseline values work for docker compose without uncommenting blocks.
+- Minimal overrides: for local run, only override host values; for Supabase, replace DATABASE_* values.
+- Fail fast on required secrets: compose requires POSTGRES_PASSWORD, GRAFANA_ADMIN_USER, GRAFANA_ADMIN_PASSWORD, and DISCORD_WEBHOOK_URL.
+
 ## Running Locally (No Docker)
 
 ```bash
 # 1. Install dependencies
 uv sync
 
-# 2. Configure environment — pick ONE option in .env
+# 2. Configure environment
 cp .env.example .env
 
-# Option A: Supabase (recommended for teams — shared DB, no local setup)
-#   Fill in your Supabase credentials in .env
-#   Get them from: Supabase Dashboard → Connect → Connection string
-
-# Option B: Local PostgreSQL
-#   Uncomment the local block in .env and comment out the Supabase block
-#   Make sure PostgreSQL is running locally:
+# For local app run (no Docker), override only these values in .env:
+#   DATABASE_HOST=localhost
+#   REDIS_HOST=localhost
+#   POSTGRES_* can stay as-is (only used by docker-compose)
+# For Supabase, replace DATABASE_* values with Supabase credentials.
+# Make sure PostgreSQL is running locally if you are not using Supabase:
 #   brew install postgresql@16 && brew services start postgresql@16
 #   createdb hackathon_db
 
 # 3. Run the server
 uv run run.py
 # Server starts at http://localhost:5000
+
+# 3.1 Main local endpoints
+#   App root:        http://localhost:5000
+#   Health:          http://localhost:5000/health
+#   Readiness:       http://localhost:5000/ready
+#   Metrics:         http://localhost:5000/metrics
 
 # 4. Verify it's working
 curl http://localhost:5000/health
@@ -153,7 +179,7 @@ urlpulse/
 │   └── nginx.conf           # Round-robin load balancer config
 ├── tests/                   # pytest suite (SQLite in-memory)
 ├── docs/                    # Architecture, decisions, runbooks
-├── .env.example             # Config template (local, Supabase, or Docker)
+├── .env.example             # Common env schema (Docker baseline + minimal overrides)
 ├── Dockerfile               # Python 3.13 + Gunicorn
 ├── docker-compose.yml       # Full stack (3 apps, Nginx, PG, Redis)
 ├── pyproject.toml

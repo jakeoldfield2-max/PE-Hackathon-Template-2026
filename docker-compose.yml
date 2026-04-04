@@ -59,6 +59,60 @@ services:
       - app-2
       - app-3
 
+  # --- Observability ---
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    container_name: urlpulse-prometheus
+    restart: always
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheusdata:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.enable-lifecycle"
+    depends_on:
+      - app-1
+      - app-2
+      - app-3
+      - alertmanager
+
+  grafana:
+    image: grafana/grafana:11.1.4
+    container_name: urlpulse-grafana
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:?set GRAFANA_ADMIN_USER in .env}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:?set GRAFANA_ADMIN_PASSWORD in .env}
+    volumes:
+      - grafanadata:/var/lib/grafana
+      - ./grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
+
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    container_name: urlpulse-alertmanager
+    restart: always
+    ports:
+      - "9093:9093"
+    environment:
+      - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL:?set DISCORD_WEBHOOK_URL in .env}
+    volumes:
+      - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    entrypoint:
+      - "/bin/sh"
+      - "-c"
+    command:
+      - "sed 's|__DISCORD_WEBHOOK_URL__|'$${DISCORD_WEBHOOK_URL}'|g' /etc/alertmanager/alertmanager.yml > /tmp/alertmanager.yml && /bin/alertmanager --config.file=/tmp/alertmanager.yml"
+
   # --- Database ---
   postgres:
     image: postgres:16
@@ -67,7 +121,7 @@ services:
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-hackathon_db}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -100,3 +154,5 @@ services:
 volumes:
   pgdata:
   redisdata:
+  prometheusdata:
+  grafanadata:
