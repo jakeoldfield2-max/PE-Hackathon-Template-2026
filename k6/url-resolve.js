@@ -27,9 +27,10 @@ export const options = {
 // TEST SCENARIO: URL Creation + Concurrent Resolution
 //
 // Simulates:
-// 1. POST /users   - Create a new user account
-// 2. POST /shorten - Create a shortened URL, receive short_code
-// 3. GET /<short_code>/info (x5 concurrent) - Resolve the short URL to original
+// 1. POST /users              - Create a new user account
+// 2. POST /users/:id/api-key  - Generate API key for authentication
+// 3. POST /shorten            - Create a shortened URL (with API key)
+// 4. GET /s/<short_code>/info (x5 concurrent) - Resolve the short URL to original
 //
 // This tests how well the system handles multiple concurrent requests
 // for the same resource (simulating a popular/viral short link).
@@ -62,15 +63,34 @@ export default function () {
   const userId = JSON.parse(signupRes.body).id;
 
   // -------------------------------------------------------------------------
-  // Step 2: Create a shortened URL
+  // Step 2: Generate API key for authentication
+  // -------------------------------------------------------------------------
+  const apiKeyRes = http.post(`${BASE_URL}/users/${userId}/api-key`, null, { headers });
+
+  const apiKeySuccess = check(apiKeyRes, {
+    'generate api key: status is 201': (r) => r.status === 201,
+  });
+
+  if (!apiKeySuccess) {
+    console.log(`API key generation failed: ${apiKeyRes.status} - ${apiKeyRes.body}`);
+    return;
+  }
+
+  const apiKey = JSON.parse(apiKeyRes.body).api_key;
+  const authHeaders = {
+    'Content-Type': 'application/json',
+    'X-API-Key': apiKey,
+  };
+
+  // -------------------------------------------------------------------------
+  // Step 3: Create a shortened URL (with API key)
   // -------------------------------------------------------------------------
   const createUrlPayload = JSON.stringify({
-    user_id: userId,
     original_url: `https://example.com/article/${uniqueId}`,
     title: `Test URL ${uniqueId}`,
   });
 
-  const createRes = http.post(`${BASE_URL}/shorten`, createUrlPayload, { headers });
+  const createRes = http.post(`${BASE_URL}/shorten`, createUrlPayload, { headers: authHeaders });
 
   const createSuccess = check(createRes, {
     'create url: status is 201': (r) => r.status === 201,
@@ -91,7 +111,7 @@ export default function () {
   const shortCode = JSON.parse(createRes.body).short_code;
 
   // -------------------------------------------------------------------------
-  // Step 3: Resolve the short URL concurrently (5 simultaneous requests)
+  // Step 4: Resolve the short URL concurrently (5 simultaneous requests)
   // -------------------------------------------------------------------------
   // Build batch request array - all hitting the same short URL
   const batchRequests = [];
@@ -137,7 +157,7 @@ export function setup() {
     throw new Error(`Service not healthy! Status: ${healthRes.status}`);
   }
   console.log(`Starting URL Resolve test with ${VIRTUAL_USERS} virtual users for ${TEST_DURATION}`);
-  console.log(`Each iteration: Create URL → ${CONCURRENT_RESOLVES} concurrent resolve requests`);
+  console.log(`Flow: Create User → Generate API Key → Create URL → ${CONCURRENT_RESOLVES} concurrent resolve requests`);
 }
 
 export function teardown() {
