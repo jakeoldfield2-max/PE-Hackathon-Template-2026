@@ -180,6 +180,7 @@ urlpulse/
 ├── tests/                   # pytest suite (SQLite in-memory)
 ├── scripts/
 │   ├── provision.sh         # One-time GCP VM setup (idempotent)
+│   ├── setup-vm.sh          # Create .env, start app, seed data on VM
 │   └── deploy.sh            # SSH deploy to GCP VM (+ rollback)
 ├── docs/                    # Architecture, decisions, deploy guide, runbooks
 ├── .env.example             # Common env schema (Docker baseline + minimal overrides)
@@ -193,14 +194,40 @@ urlpulse/
 ## Deployment
 
 ```bash
-./scripts/provision.sh --project pe-hackathon-template-2026  # Safer: explicit project
-./scripts/provision.sh --yes      # Non-interactive mode (CI/automation)
-./scripts/deploy.sh               # Deploy latest main via SSH
-./scripts/deploy.sh --rollback    # Revert last deploy
+./scripts/provision.sh --project pe-hackathon-template-2026  # Create VM, firewall, Docker
+./scripts/setup-vm.sh              # Create .env, start app, seed data (prompts for secrets)
+./scripts/deploy.sh                # Deploy latest main via SSH
+./scripts/deploy.sh --rollback     # Revert last deploy
 ```
 
 CI auto-deploys on merge to `main` (blocked unless tests + docker-build pass).
 See [docs/DEPLOY.md](docs/DEPLOY.md) for first-time setup and troubleshooting.
+
+## Testing the Hosted App
+
+```bash
+# Get your VM's external IP
+VM_IP=$(gcloud compute addresses describe urlpulse-ip --region=us-central1 --format='value(address)')
+
+# Health & readiness
+curl http://$VM_IP/health
+curl http://$VM_IP/ready
+
+# Seed demo data & test endpoints
+curl -X POST http://$VM_IP/seed
+curl http://$VM_IP/users
+curl http://$VM_IP/stats
+
+# Dashboards
+# Grafana:      http://$VM_IP:3000
+# Prometheus:   http://$VM_IP:9090
+# Alertmanager: http://$VM_IP:9093
+
+# Load tests against hosted app
+k6 run --env BASE_URL=http://$VM_IP tests/load/baseline.js   # Bronze (50 VUs)
+k6 run --env BASE_URL=http://$VM_IP tests/load/scale.js      # Silver (200 VUs)
+k6 run --env BASE_URL=http://$VM_IP tests/load/tsunami.js    # Gold (500 VUs)
+```
 
 ## Documentation
 
