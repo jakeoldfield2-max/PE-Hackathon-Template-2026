@@ -46,7 +46,7 @@ def _get_url_from_cache_or_db(short_code):
         return None, False
 
 
-@url_redirect_bp.route("/<short_code>", methods=["GET"])
+@url_redirect_bp.route("/s/<short_code>", methods=["GET"])
 def redirect_to_original(short_code):
     """
     Redirect a short URL to its original URL.
@@ -70,7 +70,7 @@ def redirect_to_original(short_code):
     return redirect(data["original_url"], code=302)
 
 
-@url_redirect_bp.route("/<short_code>/info", methods=["GET"])
+@url_redirect_bp.route("/s/<short_code>/info", methods=["GET"])
 def get_url_info(short_code):
     """
     Get information about a short URL without redirecting.

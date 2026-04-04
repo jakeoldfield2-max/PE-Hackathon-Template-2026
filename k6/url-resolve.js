@@ -96,7 +96,7 @@ export default function () {
   // Build batch request array - all hitting the same short URL
   const batchRequests = [];
   for (let i = 0; i < CONCURRENT_RESOLVES; i++) {
-    batchRequests.push(['GET', `${BASE_URL}/${shortCode}/info`, null, { tags: { name: 'resolve_url' } }]);
+    batchRequests.push(['GET', `${BASE_URL}/s/${shortCode}/info`, null, { tags: { name: 'resolve_url' } }]);
   }
 
   // Execute all requests concurrently
