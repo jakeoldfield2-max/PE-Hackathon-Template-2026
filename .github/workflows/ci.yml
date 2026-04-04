@@ -38,6 +38,7 @@ jobs:
         run: docker build -t urlpulse:ci .
 
       - name: Smoke test image can serve /health
+        id: smoke-test
         run: |
           container_id=$(docker run -d -p 5000:5000 urlpulse:ci)
           trap 'docker rm -f "$container_id" >/dev/null 2>&1 || true' EXIT
@@ -64,6 +65,43 @@ jobs:
           fi
           echo "No errors found in logs."
 
+          # Count warnings for summary
+          WARNING_COUNT=$(grep -c '"level": "WARNING"' /tmp/container.log || echo "0")
+          echo "warning_count=$WARNING_COUNT" >> $GITHUB_OUTPUT
+
+      - name: Generate build summary
+        if: always()
+        run: |
+          echo "## 🐳 Docker Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ -f /tmp/container.log ]; then
+            WARNING_COUNT=$(grep -c '"level": "WARNING"' /tmp/container.log || echo "0")
+            ERROR_COUNT=$(grep -c '"level": "ERROR"' /tmp/container.log || echo "0")
+
+            if [ "$ERROR_COUNT" -gt 0 ]; then
+              echo "### ❌ Errors Found: $ERROR_COUNT" >> $GITHUB_STEP_SUMMARY
+              echo '```' >> $GITHUB_STEP_SUMMARY
+              grep '"level": "ERROR"' /tmp/container.log | head -5 >> $GITHUB_STEP_SUMMARY
+              echo '```' >> $GITHUB_STEP_SUMMARY
+            else
+              echo "### ✅ No Errors" >> $GITHUB_STEP_SUMMARY
+            fi
+
+            if [ "$WARNING_COUNT" -gt 0 ]; then
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "### ⚠️ Warnings: $WARNING_COUNT" >> $GITHUB_STEP_SUMMARY
+              echo "<details><summary>View warnings</summary>" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo '```json' >> $GITHUB_STEP_SUMMARY
+              grep '"level": "WARNING"' /tmp/container.log | head -10 >> $GITHUB_STEP_SUMMARY
+              echo '```' >> $GITHUB_STEP_SUMMARY
+              echo "</details>" >> $GITHUB_STEP_SUMMARY
+            fi
+          else
+            echo "### ⚠️ No container logs available" >> $GITHUB_STEP_SUMMARY
+          fi
+
   deploy:
     runs-on: ubuntu-latest
     needs: [test, docker-build]
@@ -71,6 +109,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Deploy via SSH
+        id: deploy
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
@@ -79,7 +118,53 @@ jobs:
           if [ -z "$DEPLOY_HOST" ] || [ -z "$DEPLOY_USER" ] || [ -z "$DEPLOY_KEY" ]; then
             echo "Deploy secrets not configured — skipping deploy."
             echo "Set DEPLOY_HOST, DEPLOY_USER, and DEPLOY_KEY in GitHub Secrets."
+            echo "status=skipped" >> $GITHUB_OUTPUT
+            echo "reason=Secrets not configured" >> $GITHUB_OUTPUT
             exit 0
           fi
           chmod +x scripts/deploy.sh
-          ./scripts/deploy.sh
+          if ./scripts/deploy.sh 2>&1 | tee /tmp/deploy.log; then
+            echo "status=success" >> $GITHUB_OUTPUT
+          else
+            echo "status=failed" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+
+      - name: Generate deploy summary
+        if: always()
+        env:
+          DEPLOY_STATUS: ${{ steps.deploy.outputs.status }}
+          DEPLOY_REASON: ${{ steps.deploy.outputs.reason }}
+        run: |
+          echo "## 🚀 Deploy Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          case "$DEPLOY_STATUS" in
+            success)
+              echo "### ✅ Deploy Successful" >> $GITHUB_STEP_SUMMARY
+              echo "Application deployed to production." >> $GITHUB_STEP_SUMMARY
+              ;;
+            skipped)
+              echo "### ⏭️ Deploy Skipped" >> $GITHUB_STEP_SUMMARY
+              echo "**Reason:** $DEPLOY_REASON" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "To enable deployment, configure these GitHub Secrets:" >> $GITHUB_STEP_SUMMARY
+              echo "- \`DEPLOY_HOST\` - Server hostname or IP" >> $GITHUB_STEP_SUMMARY
+              echo "- \`DEPLOY_USER\` - SSH username" >> $GITHUB_STEP_SUMMARY
+              echo "- \`DEPLOY_KEY\` - Base64-encoded SSH private key" >> $GITHUB_STEP_SUMMARY
+              ;;
+            failed)
+              echo "### ❌ Deploy Failed" >> $GITHUB_STEP_SUMMARY
+              if [ -f /tmp/deploy.log ]; then
+                echo "<details><summary>View logs</summary>" >> $GITHUB_STEP_SUMMARY
+                echo "" >> $GITHUB_STEP_SUMMARY
+                echo '```' >> $GITHUB_STEP_SUMMARY
+                tail -50 /tmp/deploy.log >> $GITHUB_STEP_SUMMARY
+                echo '```' >> $GITHUB_STEP_SUMMARY
+                echo "</details>" >> $GITHUB_STEP_SUMMARY
+              fi
+              ;;
+            *)
+              echo "### ⚠️ Deploy status unknown" >> $GITHUB_STEP_SUMMARY
+              ;;
+          esac
