@@ -26,7 +26,9 @@ def test_list_users(client):
     response = client.get("/users")
     assert response.status_code == 200
     data = response.get_json()
-    assert len(data) == 2
+    assert isinstance(data, dict)
+    assert "users" in data
+    assert len(data["users"]) == 2
 
 
 def test_get_user_by_id(client):
