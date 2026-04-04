@@ -4,7 +4,7 @@ import { check, sleep } from 'k6';
 // =============================================================================
 // CONFIGURATION - Adjust these values as needed
 // =============================================================================
-const VIRTUAL_USERS = 50;        // Number of concurrent users
+const VIRTUAL_USERS = 800;       // Number of concurrent users
 const TEST_DURATION = '1m';      // How long the test runs (e.g., '30s', '1m', '5m')
 const BASE_URL = 'http://localhost';  // Target URL (Docker: localhost, Local: localhost:5000)
 
@@ -12,11 +12,13 @@ const BASE_URL = 'http://localhost';  // Target URL (Docker: localhost, Local: l
 // TEST OPTIONS
 // =============================================================================
 export const options = {
-  vus: VIRTUAL_USERS,
-  duration: TEST_DURATION,
+  stages: [
+    { duration: '10s', target: VIRTUAL_USERS },  // Ramp up to target VUs over 10s
+    { duration: '50s', target: VIRTUAL_USERS },  // Stay at target VUs for 50s
+  ],
   thresholds: {
     http_req_duration: ['p(95)<300'],  // 95% of requests should be < 300ms
-    http_req_failed: ['rate<0.01'],    // Error rate should be < 1%
+    http_req_failed: ['rate<0.04'],    // Error rate should be < 4%
   },
 };
 

@@ -7,36 +7,38 @@ import { check, sleep } from 'k6';
 const VIRTUAL_USERS = 600;       // Number of concurrent users
 const TEST_DURATION = '1m';      // How long the test runs (e.g., '30s', '1m', '5m')
 const BASE_URL = 'http://localhost';  // Target URL (Docker: localhost, Local: localhost:5000)
+const CONCURRENT_RESOLVES = 5;   // Number of concurrent requests to resolve the same short URL
 
 // =============================================================================
 // TEST OPTIONS
 // =============================================================================
 export const options = {
   stages: [
-    { duration: '10s', target: VIRTUAL_USERS },  // Ramp up to target VUs over 10s
-    { duration: '50s', target: VIRTUAL_USERS },  // Stay at target VUs for 50s
+    { duration: '15s', target: VIRTUAL_USERS },  // Ramp up to 200 VUs over 15s
+    { duration: '45s', target: VIRTUAL_USERS },  // Stay at 200 VUs for 45s
   ],
   thresholds: {
-    http_req_duration: ['p(95)<400'],  // 95% of requests should be < 400ms
+    http_req_duration: ['p(95)<300'],  // 95% of requests should be < 300ms
     http_req_failed: ['rate<0.04'],    // Error rate should be < 4%
   },
 };
 
 // =============================================================================
-// TEST SCENARIO: URL Lifecycle (Create → Edit → Delete)
+// TEST SCENARIO: URL Creation + Concurrent Resolution
 //
-// Simulates a complete URL lifecycle:
+// Simulates:
 // 1. POST /users   - Create a new user account
-// 2. POST /shorten - Create a new shortened URL
-// 3. POST /update  - Edit the URL (change title)
-// 4. POST /delete  - Delete the URL
+// 2. POST /shorten - Create a shortened URL, receive short_code
+// 3. GET /<short_code>/info (x5 concurrent) - Resolve the short URL to original
+//
+// This tests how well the system handles multiple concurrent requests
+// for the same resource (simulating a popular/viral short link).
 // =============================================================================
 export default function () {
   const headers = { 'Content-Type': 'application/json' };
 
   // Generate unique identifiers for this iteration
   const uniqueId = `${__VU}_${__ITER}_${Date.now()}`;
-  const urlTitle = `Test URL ${uniqueId}`;
 
   // -------------------------------------------------------------------------
   // Step 1: Create a user
@@ -60,12 +62,12 @@ export default function () {
   const userId = JSON.parse(signupRes.body).id;
 
   // -------------------------------------------------------------------------
-  // Step 2: Create a URL
+  // Step 2: Create a shortened URL
   // -------------------------------------------------------------------------
   const createUrlPayload = JSON.stringify({
     user_id: userId,
-    original_url: `https://example.com/original/${uniqueId}`,
-    title: urlTitle,
+    original_url: `https://example.com/article/${uniqueId}`,
+    title: `Test URL ${uniqueId}`,
   });
 
   const createRes = http.post(`${BASE_URL}/shorten`, createUrlPayload, { headers });
@@ -86,62 +88,40 @@ export default function () {
     return;
   }
 
-  const urlId = JSON.parse(createRes.body).id;
-
-  sleep(0.5); // Brief pause between operations
+  const shortCode = JSON.parse(createRes.body).short_code;
 
   // -------------------------------------------------------------------------
-  // Step 3: Edit the URL (update the title)
+  // Step 3: Resolve the short URL concurrently (5 simultaneous requests)
   // -------------------------------------------------------------------------
-  const updatedTitle = `Updated ${urlTitle}`;
-  const updatePayload = JSON.stringify({
-    user_id: userId,
-    url_id: urlId,
-    field: 'title',
-    new_value: updatedTitle,
-  });
-
-  const updateRes = http.post(`${BASE_URL}/update`, updatePayload, { headers });
-
-  const updateSuccess = check(updateRes, {
-    'update url: status is 200': (r) => r.status === 200,
-    'update url: confirms update': (r) => {
-      try {
-        const body = JSON.parse(r.body);
-        return body.message === 'URL updated successfully';
-      } catch {
-        return false;
-      }
-    },
-  });
-
-  if (!updateSuccess) {
-    console.log(`URL update failed: ${updateRes.status} - ${updateRes.body}`);
+  // Build batch request array - all hitting the same short URL
+  const batchRequests = [];
+  for (let i = 0; i < CONCURRENT_RESOLVES; i++) {
+    batchRequests.push(['GET', `${BASE_URL}/${shortCode}/info`, null, { tags: { name: 'resolve_url' } }]);
   }
 
-  sleep(0.5); // Brief pause between operations
+  // Execute all requests concurrently
+  const responses = http.batch(batchRequests);
 
-  // -------------------------------------------------------------------------
-  // Step 4: Delete the URL
-  // -------------------------------------------------------------------------
-  const deletePayload = JSON.stringify({
-    user_id: userId,
-    title: updatedTitle,  // Use the updated title since we changed it
+  // Check all responses
+  let allSuccessful = true;
+  responses.forEach((res, index) => {
+    const success = check(res, {
+      [`resolve ${index + 1}: status is 200`]: (r) => r.status === 200,
+      [`resolve ${index + 1}: returns original_url`]: (r) => {
+        try {
+          const body = JSON.parse(r.body);
+          return body.original_url !== undefined && body.original_url.includes('example.com');
+        } catch {
+          return false;
+        }
+      },
+    });
+    if (!success) allSuccessful = false;
   });
 
-  const deleteRes = http.post(`${BASE_URL}/delete`, deletePayload, { headers });
-
-  check(deleteRes, {
-    'delete url: status is 200': (r) => r.status === 200,
-    'delete url: confirms deletion': (r) => {
-      try {
-        const body = JSON.parse(r.body);
-        return body.message === 'URL deleted successfully';
-      } catch {
-        return false;
-      }
-    },
-  });
+  if (!allSuccessful) {
+    console.log(`Some resolve requests failed for short_code: ${shortCode}`);
+  }
 
   // Simulate user think time before next iteration
   sleep(1);
@@ -156,11 +136,10 @@ export function setup() {
   if (healthRes.status !== 200) {
     throw new Error(`Service not healthy! Status: ${healthRes.status}`);
   }
-  console.log(`Starting URL Lifecycle test with ${VIRTUAL_USERS} virtual users for ${TEST_DURATION}`);
-  console.log('Flow: Create User → Create URL → Edit URL → Delete URL');
+  console.log(`Starting URL Resolve test with ${VIRTUAL_USERS} virtual users for ${TEST_DURATION}`);
+  console.log(`Each iteration: Create URL → ${CONCURRENT_RESOLVES} concurrent resolve requests`);
 }
 
 export function teardown() {
-  console.log('Test complete. Run cleanup.sql to remove test users from the database.');
-  console.log('Note: URLs are deleted during the test, but test users remain.');
+  console.log('Test complete. Run cleanup.sql to remove test data from the database.');
 }

@@ -1,6 +1,7 @@
 import os
 
-from peewee import DatabaseProxy, Model, PostgresqlDatabase
+from peewee import DatabaseProxy, Model
+from playhouse.pool import PooledPostgresqlDatabase
 
 db = DatabaseProxy()
 
@@ -16,8 +17,10 @@ def init_db(app):
     # Use SSL for remote connections (e.g., Supabase), not for local Docker
     ssl_mode = "require" if host not in ("localhost", "postgres") else None
 
-    database = PostgresqlDatabase(
+    database = PooledPostgresqlDatabase(
         os.environ.get("DATABASE_NAME", "hackathon_db"),
+        max_connections=8,
+        stale_timeout=600,
         host=host,
         port=int(os.environ.get("DATABASE_PORT", 5432)),
         user=os.environ.get("DATABASE_USER", "postgres"),
@@ -41,4 +44,4 @@ def init_db(app):
     @app.teardown_appcontext
     def _db_close(exc):
         if not db.is_closed():
-            db.close()
+            db.close_idle()
