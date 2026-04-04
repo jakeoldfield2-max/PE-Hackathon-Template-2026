@@ -1,8 +1,8 @@
 import streamlit as st
-from ui.tabs.shorten import render_tab_shorten
-from ui.tabs.urls import render_tab_urls
-from ui.tabs.users import render_tab_users
-from ui.tabs.manage import render_tab_manage
+from app.ui.tabs.shorten import render_tab_shorten
+from app.ui.tabs.urls import render_tab_urls
+from app.ui.tabs.users import render_tab_users
+from app.ui.tabs.manage import render_tab_manage
 
 def render_all_tabs(BASE, user_map):
     tab_shorten, tab_urls, tab_users, tab_manage = st.tabs([
