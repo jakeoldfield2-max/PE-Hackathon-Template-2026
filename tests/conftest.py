@@ -51,19 +51,36 @@ def client(app):
 
 
 class _NullRedis:
+    def __init__(self):
+        self._data = {}
+
     def get(self, key):
-        return None
+        return self._data.get(key)
 
     def setex(self, key, ttl, value):
+        self._data[key] = value
         return True
 
     def keys(self, pattern):
         return []
 
     def delete(self, *keys):
-        return 0
+        for key in keys:
+            self._data.pop(key, None)
+        return len(keys)
 
     def ping(self):
+        return True
+
+    def incr(self, key):
+        val = int(self._data.get(key, 0)) + 1
+        self._data[key] = str(val)
+        return val
+
+    def publish(self, channel, message):
+        return 1
+
+    def expire(self, key, ttl):
         return True
 
 
@@ -89,14 +106,28 @@ def sample_user(client):
 
 
 @pytest.fixture
-def sample_url(client, sample_user):
+def sample_user_with_api_key(client, sample_user):
+    """Create a sample user with an API key for authenticated endpoints."""
+    # Generate API key for the user
+    response = client.post(f"/users/{sample_user['id']}/api-key")
+    api_key_data = response.get_json()
+    sample_user["api_key"] = api_key_data["api_key"]
+    return sample_user
+
+
+@pytest.fixture
+def sample_url(client, sample_user_with_api_key):
+    """Create a sample URL using authenticated API."""
     timestamp = int(time.time() * 1000)
     response = client.post(
         "/shorten",
         json={
-            "user_id": sample_user["id"],
             "original_url": f"https://example.com/test/{timestamp}",
             "title": f"Test URL {timestamp}",
         },
+        headers={"X-API-Key": sample_user_with_api_key["api_key"]},
     )
-    return response.get_json()
+    data = response.get_json()
+    data["user_id"] = sample_user_with_api_key["id"]
+    data["api_key"] = sample_user_with_api_key["api_key"]
+    return data

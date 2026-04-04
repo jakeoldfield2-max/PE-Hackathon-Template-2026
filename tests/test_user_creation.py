@@ -99,3 +99,40 @@ class TestUserCreation:
         assert response.status_code == 404
         data = response.get_json()
         assert 'error' in data
+
+
+class TestAPIKeyGeneration:
+    """Test suite for API key generation functionality."""
+
+    def test_generate_api_key_success(self, client, sample_user):
+        """Test successful API key generation."""
+        response = client.post(f"/users/{sample_user['id']}/api-key")
+
+        assert response.status_code == 201
+        data = response.get_json()
+        assert 'api_key' in data
+        assert data['api_key'].startswith('upk_')
+        assert len(data['api_key']) > 10
+        assert data['user_id'] == sample_user['id']
+        assert 'message' in data
+
+    def test_generate_api_key_replaces_old(self, client, sample_user):
+        """Test that generating a new API key replaces the old one."""
+        # Generate first key
+        response1 = client.post(f"/users/{sample_user['id']}/api-key")
+        key1 = response1.get_json()['api_key']
+
+        # Generate second key
+        response2 = client.post(f"/users/{sample_user['id']}/api-key")
+        key2 = response2.get_json()['api_key']
+
+        # Keys should be different
+        assert key1 != key2
+
+    def test_generate_api_key_user_not_found(self, client):
+        """Test API key generation fails for non-existent user."""
+        response = client.post('/users/999999/api-key')
+
+        assert response.status_code == 404
+        data = response.get_json()
+        assert 'error' in data
