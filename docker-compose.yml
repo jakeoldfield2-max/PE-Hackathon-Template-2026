@@ -107,9 +107,11 @@ services:
       - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL:?set DISCORD_WEBHOOK_URL in .env}
     volumes:
       - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    entrypoint:
+      - "/bin/sh"
+      - "-c"
     command:
-      - "--config.file=/etc/alertmanager/alertmanager.yml"
-      - "--config.expand-env"
+      - "sed 's|__DISCORD_WEBHOOK_URL__|'$${DISCORD_WEBHOOK_URL}'|g' /etc/alertmanager/alertmanager.yml > /tmp/alertmanager.yml && /bin/alertmanager --config.file=/tmp/alertmanager.yml"
 
   # --- Database ---
   postgres:

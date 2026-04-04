@@ -7,7 +7,6 @@ from prometheus_client import (
     Counter,
     Gauge,
     Histogram,
-    ProcessCollector,
     generate_latest,
 )
 
@@ -23,8 +22,6 @@ REQUEST_DURATION = Histogram(
     buckets=(0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.0, 5.0, 10.0),
 )
 
-# Registers process_resident_memory_bytes and related process metrics.
-PROCESS_COLLECTOR = ProcessCollector()
 ACTIVE_URLS_GAUGE = Gauge("urlpulse_active_urls", "Number of active short URLs")
 ACTIVE_USERS_GAUGE = Gauge("urlpulse_active_users", "Number of active users")
 
