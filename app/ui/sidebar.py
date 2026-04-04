@@ -1,8 +1,13 @@
+import os
 import streamlit as st
 from datetime import datetime
 from app.ui.helpers import api, probe
 
 def render_sidebar():
+    # When running inside Docker, use internal Nginx hostname
+    _in_docker = os.path.exists("/.dockerenv")
+    _default_docker_base = "http://nginx" if _in_docker else "http://localhost"
+
     with st.sidebar:
         st.markdown(
             '<div style="font-family:JetBrains Mono,monospace;font-size:1.2rem;font-weight:700;color:#4ade80;margin-bottom:0.1rem;">URLPulse</div>'
@@ -12,7 +17,7 @@ def render_sidebar():
 
         st.markdown('<div class="section-label">— backend</div>', unsafe_allow_html=True)
         mode = st.radio("mode", ["Docker  :80", "Local  :5000"], label_visibility="collapsed")
-        BASE = "http://localhost" if "Docker" in mode else "http://localhost:5000"
+        BASE = _default_docker_base if "Docker" in mode else "http://localhost:5000"
         custom = st.text_input("CUSTOM BASE URL", value="", placeholder="https://34.x.x.x")
         if custom.strip():
             BASE = custom.strip().rstrip("/")
