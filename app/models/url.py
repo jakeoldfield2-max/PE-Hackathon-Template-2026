@@ -7,7 +7,7 @@ from app.models.user import User
 class Url(BaseModel):
     id = AutoField()
     user_id = ForeignKeyField(User, backref="urls", column_name="user_id")
-    short_code = CharField()
+    short_code = CharField(unique=True, index=True)
     original_url = TextField()
     title = CharField()
     is_active = BooleanField()

@@ -14,11 +14,10 @@ url_delete_bp = Blueprint("url_delete", __name__)
 @url_delete_bp.route("/delete", methods=["POST"])
 def delete_url():
     """
-    Delete a URL by user_id and title.
+    Delete a URL by short_code.
 
     Request body:
-        - user_id: ID of the user requesting deletion
-        - title: The title of the URL to delete
+        - short_code: The code of the URL to delete
 
     Returns:
         - Confirmation of deletion
@@ -28,30 +27,19 @@ def delete_url():
     if not data:
         return jsonify(error="Request body is required"), 400
 
-    user_id = data.get("user_id")
-    title = data.get("title")
+    short_code = data.get("short_code")
+    if not short_code:
+        return jsonify(error="short_code is required"), 400
 
-    # Validate required fields
-    if not user_id:
-        return jsonify(error="user_id is required"), 400
-    if not title:
-        return jsonify(error="title is required"), 400
-
-    # Verify user exists
+    # Find the URL by short_code
     try:
-        user = User.get_by_id(user_id)
-    except User.DoesNotExist:
-        return jsonify(error="User not found"), 404
-
-    # Find the URL by title and user_id
-    try:
-        url = Url.get((Url.title == title) & (Url.user_id == user_id))
+        url = Url.get(Url.short_code == short_code)
     except Url.DoesNotExist:
-        return jsonify(error="URL not found with that title for this user"), 404
+        return jsonify(error="URL not found"), 404
 
     # Store URL info for response before deletion
     deleted_url_info = {
-        "url_id": url.id,
+        "id": url.id,
         "short_code": url.short_code,
         "original_url": url.original_url,
         "title": url.title
@@ -60,7 +48,7 @@ def delete_url():
     # Delete all events associated with this URL
     events_deleted = Event.delete().where(Event.url_id == url.id).execute()
 
-    # Delete the URL
+    # Delete the URL record
     url.delete_instance()
 
     cache_delete_pattern("urls:*")
@@ -70,3 +58,4 @@ def delete_url():
         "deleted_url": deleted_url_info,
         "events_deleted": events_deleted
     }), 200
+

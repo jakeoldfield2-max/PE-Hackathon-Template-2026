@@ -19,14 +19,19 @@ def render_tab_manage(BASE):
             st.markdown('<div class="alert-err">short code is required</div>', unsafe_allow_html=True)
         else:
             payload_u = {"short_code": upd_code, "is_active": upd_active == "true"}
-            if upd_new_url.strip(): payload_u["original_url"] = upd_new_url.strip()
-            if upd_title.strip():   payload_u["title"] = upd_title.strip()
+            if upd_new_url.strip():
+                payload_u["original_url"] = upd_new_url.strip()
+            if upd_title.strip():
+                payload_u["title"] = upd_title.strip()
             with st.spinner("updating…"):
                 sc, rv = api("POST", "/update", BASE, json=payload_u)
             if sc in (200, 201):
                 st.markdown(f'<div class="alert-ok">updated → {upd_code}</div>', unsafe_allow_html=True)
             else:
-                st.markdown(f'<div class="alert-err">{rv.get("error","update failed")}</div>', unsafe_allow_html=True)
+                st.markdown(
+                    f'<div class="alert-err">{rv.get("error", "update failed")}</div>',
+                    unsafe_allow_html=True,
+                )
 
     st.markdown('<hr class="divider">', unsafe_allow_html=True)
     st.markdown('<div class="section-label">— delete url</div>', unsafe_allow_html=True)
@@ -50,4 +55,7 @@ def render_tab_manage(BASE):
             if sc in (200, 201, 204):
                 st.markdown(f'<div class="alert-ok">deleted → {del_code}</div>', unsafe_allow_html=True)
             else:
-                st.markdown(f'<div class="alert-err">{rv.get("error","delete failed")}</div>', unsafe_allow_html=True)
+                st.markdown(
+                    f'<div class="alert-err">{rv.get("error", "delete failed")}</div>',
+                    unsafe_allow_html=True,
+                )

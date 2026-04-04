@@ -4,6 +4,7 @@ from datetime import datetime
 import json
 
 from flask import Blueprint, jsonify, request
+from peewee import IntegrityError
 
 from app.cache import cache_delete_pattern
 from app.models.user import User
@@ -62,20 +63,28 @@ def shorten_url():
     except User.DoesNotExist:
         return jsonify(error="User not found"), 404
 
-    # Generate unique short code
-    short_code = generate_short_code()
+    provided_code = data.get("short_code")
     now = datetime.now()
 
-    # Create the URL record
-    url = Url.create(
-        user_id=user,
-        short_code=short_code,
-        original_url=original_url,
-        title=title,
-        is_active=True,
-        created_at=now,
-        updated_at=now
-    )
+    # Try up to 3 times if we auto-generate, or exactly 1 time if custom code is provided
+    for attempt in range(3):
+        short_code = provided_code if provided_code else generate_short_code()
+        try:
+            # Create the URL record
+            url = Url.create(
+                user_id=user,
+                short_code=short_code,
+                original_url=original_url,
+                title=title,
+                is_active=True,
+                created_at=now,
+                updated_at=now
+            )
+            break
+        except IntegrityError:
+            if provided_code or attempt == 2:
+                return jsonify(error="Short code is already in use"), 409
+            # Otherwise we auto-generated a collision, so loop again and retry
 
     # Log the creation event
     Event.create(

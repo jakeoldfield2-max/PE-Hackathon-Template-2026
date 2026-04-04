@@ -9,8 +9,10 @@ def render_tab_shorten(BASE, user_map):
     with r1c1:
         dest = st.text_input("DESTINATION URL", placeholder="https://github.com/MLH/mlh-policies")
     with r1c2:
-        custom_code = st.text_input("SHORT CODE", placeholder="auto-generated", max_chars=12,
-                                     help="Leave blank for a random 6-char code")
+        custom_code = st.text_input(
+            "SHORT CODE", placeholder="auto-generated", max_chars=12,
+            help="Leave blank for a random 6-char code",
+        )
 
     r2c1, r2c2, r2c3 = st.columns([2, 2, 1])
     with r2c1:
@@ -56,15 +58,22 @@ def render_tab_shorten(BASE, user_map):
                     f'<div class="result-box">'
                     f'<div class="result-label">short link created</div>'
                     f'<div class="result-link">{short_link}</div>'
-                    f'<div style="font-family:JetBrains Mono,monospace;font-size:0.72rem;color:#2e7040;margin-top:0.3rem;">'
-                    f'→ {dest[:80]}{"…" if len(dest)>80 else ""}</div>'
+                    f'<div style="font-family:JetBrains Mono,monospace;font-size:0.72rem;'
+                    f'color:var(--accent-dim);margin-top:0.3rem;">'
+                    f'→ {dest[:80]}{"…" if len(dest) > 80 else ""}</div>'
                     f'</div>',
                     unsafe_allow_html=True,
                 )
             else:
-                st.markdown(f'<div class="alert-err">error: {rv.get("error", json.dumps(rv))}</div>', unsafe_allow_html=True)
+                st.markdown(
+                    f'<div class="alert-err">error: {rv.get("error", json.dumps(rv))}</div>',
+                    unsafe_allow_html=True,
+                )
 
-    st.markdown('<div class="section-label" style="margin-top:2rem;">— quick reference</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="section-label" style="margin-top:2rem;">— quick reference</div>',
+        unsafe_allow_html=True,
+    )
     st.code(f"""# shorten
 curl -X POST {BASE}/shorten \\
   -H 'Content-Type: application/json' \\

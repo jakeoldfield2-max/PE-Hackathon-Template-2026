@@ -24,7 +24,12 @@ BASE = render_sidebar()
 render_header_stats(BASE)
 
 _, u_resp = api("GET", "/users", BASE)
-users_list = u_resp if isinstance(u_resp, list) else []
+if isinstance(u_resp, list):
+    users_list = u_resp
+elif isinstance(u_resp, dict) and "users" in u_resp:
+    users_list = u_resp["users"]
+else:
+    users_list = []
 user_map = {f"@{u['username']}  (id:{u['id']})": u["id"] for u in users_list}
 
 render_all_tabs(BASE, user_map)

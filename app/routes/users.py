@@ -42,16 +42,21 @@ def create_user():
 
 @users_bp.route("/users", methods=["GET"])
 def list_users():
-    """List all users."""
-    cached = cache_get("users:list")
+    """List users (paginated for production)."""
+    limit = request.args.get("limit", default=100, type=int)
+    offset = request.args.get("offset", default=0, type=int)
+    limit = min(limit, 500)
+    
+    cache_key = f"users:list:{limit}:{offset}"
+    cached = cache_get(cache_key)
     if cached is not None:
-        return jsonify(cached), 200, {"X-Cache": "HIT"}
+        return jsonify({"users": cached, "limit": limit, "offset": offset}), 200, {"X-Cache": "HIT"}
 
-    users = User.select().order_by(User.id)
+    users = User.select().order_by(User.id.desc()).limit(limit).offset(offset)
     result = [model_to_dict(u) for u in users]
-    cache_set("users:list", result, ttl=10)
+    cache_set(cache_key, result, ttl=10)
 
-    return jsonify(result), 200, {"X-Cache": "MISS"}
+    return jsonify({"users": result, "limit": limit, "offset": offset}), 200, {"X-Cache": "MISS"}
 
 
 @users_bp.route("/users/<int:user_id>", methods=["GET"])
