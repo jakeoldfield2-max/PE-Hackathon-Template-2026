@@ -100,7 +100,7 @@ run_remote "
   git pull origin main
 
   echo '--- Rebuilding and restarting containers ---'
-  docker compose up -d --build --remove-orphans
+  docker compose up -d --build --force-recreate --remove-orphans
 
   echo '--- Waiting for health check ---'
   sleep 5
