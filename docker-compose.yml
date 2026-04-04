@@ -10,7 +10,7 @@ services:
     build: .
     container_name: urlpulse-app-1
     restart: always
-    env_file: .env.docker
+    env_file: .env
     environment:
       - INSTANCE_ID=app-1
     depends_on:
@@ -23,7 +23,7 @@ services:
     build: .
     container_name: urlpulse-app-2
     restart: always
-    env_file: .env.docker
+    env_file: .env
     environment:
       - INSTANCE_ID=app-2
     depends_on:
@@ -36,7 +36,7 @@ services:
     build: .
     container_name: urlpulse-app-3
     restart: always
-    env_file: .env.docker
+    env_file: .env
     environment:
       - INSTANCE_ID=app-3
     depends_on:

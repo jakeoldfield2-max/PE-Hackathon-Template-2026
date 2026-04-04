@@ -12,7 +12,6 @@ build/
 
 # Environment variables
 .env
-.env.docker
 SECRETS.md
 
 # uv
