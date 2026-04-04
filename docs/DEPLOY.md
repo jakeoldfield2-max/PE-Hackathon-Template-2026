@@ -9,6 +9,7 @@
 | Script | What it does |
 |--------|-------------|
 | `scripts/provision.sh` | Creates VM, static IP, firewall, installs Docker, clones repo, generates CI deploy key |
+| `scripts/setup-vm.sh` | Creates `.env`, starts containers, seeds data, verifies health |
 | `scripts/deploy.sh` | SSHes into VM, pulls latest, rebuilds containers, runs health check |
 | `scripts/deploy.sh --rollback` | Reverts last commit on VM and redeploys |
 
@@ -20,10 +21,8 @@
 # 1. Provision (validates account, project, billing, APIs — then creates everything)
 ./scripts/provision.sh --project <your-project-id>
 
-# 2. SSH in, create .env, start the app
-gcloud compute ssh urlpulse-vm --zone=us-central1-a
-cd PE-Hackathon-Template-2026 && cp .env.example .env && nano .env
-docker compose up -d --build
+# 2. Set up .env, start the app, seed data (prompts for passwords)
+./scripts/setup-vm.sh
 
 # 3. Add the GitHub Secrets printed by provision.sh (DEPLOY_HOST, DEPLOY_USER, DEPLOY_KEY)
 ```
