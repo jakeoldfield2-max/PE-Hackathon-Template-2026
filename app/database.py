@@ -13,8 +13,8 @@ class BaseModel(Model):
 def init_db(app):
     host = os.environ.get("DATABASE_HOST", "localhost")
 
-    # Use SSL for remote connections (e.g., Supabase)
-    ssl_mode = "require" if host != "localhost" else None
+    # Use SSL for remote connections (e.g., Supabase), not for local Docker
+    ssl_mode = "require" if host not in ("localhost", "postgres") else None
 
     database = PostgresqlDatabase(
         os.environ.get("DATABASE_NAME", "hackathon_db"),

@@ -38,19 +38,78 @@ jobs:
         run: docker build -t urlpulse:ci .
 
       - name: Smoke test image can serve /health
+        id: smoke-test
         run: |
           container_id=$(docker run -d -p 5000:5000 urlpulse:ci)
           trap 'docker rm -f "$container_id" >/dev/null 2>&1 || true' EXIT
-          curl --fail --retry 10 --retry-delay 1 --retry-connrefused http://127.0.0.1:5000/health
+
+          echo "Waiting for container to start..."
+          sleep 5
+
+          echo "Container logs:"
+          docker logs "$container_id" 2>&1 | tee /tmp/container.log
+
+          echo ""
+          echo "Testing /health endpoint..."
+          curl --fail --retry 10 --retry-delay 2 --retry-connrefused http://127.0.0.1:5000/health || {
+            echo "Health check failed!"
+            exit 1
+          }
+
+          echo ""
+          echo "Checking for errors in logs..."
+          if grep -q '"level": "ERROR"' /tmp/container.log; then
+            echo "ERROR: Found ERROR level logs - failing build"
+            grep '"level": "ERROR"' /tmp/container.log
+            exit 1
+          fi
+          echo "No errors found in logs."
+
+          # Count warnings for summary
+          WARNING_COUNT=$(grep -c '"level": "WARNING"' /tmp/container.log || echo "0")
+          echo "warning_count=$WARNING_COUNT" >> $GITHUB_OUTPUT
+
+      - name: Generate build summary
+        if: always()
+        run: |
+          echo "## 🐳 Docker Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ -f /tmp/container.log ]; then
+            WARNING_COUNT=$(grep -c '"level": "WARNING"' /tmp/container.log || echo "0")
+            ERROR_COUNT=$(grep -c '"level": "ERROR"' /tmp/container.log || echo "0")
+
+            if [ "$ERROR_COUNT" -gt 0 ]; then
+              echo "### ❌ Errors Found: $ERROR_COUNT" >> $GITHUB_STEP_SUMMARY
+              echo '```' >> $GITHUB_STEP_SUMMARY
+              grep '"level": "ERROR"' /tmp/container.log | head -5 >> $GITHUB_STEP_SUMMARY
+              echo '```' >> $GITHUB_STEP_SUMMARY
+            else
+              echo "### ✅ No Errors" >> $GITHUB_STEP_SUMMARY
+            fi
+
+            if [ "$WARNING_COUNT" -gt 0 ]; then
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "### ⚠️ Warnings: $WARNING_COUNT" >> $GITHUB_STEP_SUMMARY
+              echo "<details><summary>View warnings</summary>" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo '```json' >> $GITHUB_STEP_SUMMARY
+              grep '"level": "WARNING"' /tmp/container.log | head -10 >> $GITHUB_STEP_SUMMARY
+              echo '```' >> $GITHUB_STEP_SUMMARY
+              echo "</details>" >> $GITHUB_STEP_SUMMARY
+            fi
+          else
+            echo "### ⚠️ No container logs available" >> $GITHUB_STEP_SUMMARY
+          fi
 
   deploy:
     runs-on: ubuntu-latest
     needs: [test, docker-build]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v4
 
       - name: Deploy via SSH
+        id: deploy
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
@@ -59,7 +118,166 @@ jobs:
           if [ -z "$DEPLOY_HOST" ] || [ -z "$DEPLOY_USER" ] || [ -z "$DEPLOY_KEY" ]; then
             echo "Deploy secrets not configured — skipping deploy."
             echo "Set DEPLOY_HOST, DEPLOY_USER, and DEPLOY_KEY in GitHub Secrets."
+            echo "status=skipped" >> $GITHUB_OUTPUT
+            echo "reason=Secrets not configured" >> $GITHUB_OUTPUT
             exit 0
           fi
           chmod +x scripts/deploy.sh
-          ./scripts/deploy.sh
+          if ./scripts/deploy.sh 2>&1 | tee /tmp/deploy.log; then
+            echo "status=success" >> $GITHUB_OUTPUT
+          else
+            echo "status=failed" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+
+      - name: Generate deploy summary
+        if: always()
+        env:
+          DEPLOY_STATUS: ${{ steps.deploy.outputs.status }}
+          DEPLOY_REASON: ${{ steps.deploy.outputs.reason }}
+        run: |
+          echo "## 🚀 Deploy Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          case "$DEPLOY_STATUS" in
+            success)
+              echo "### ✅ Deploy Successful" >> $GITHUB_STEP_SUMMARY
+              echo "Application deployed to production." >> $GITHUB_STEP_SUMMARY
+              ;;
+            skipped)
+              echo "### ⏭️ Deploy Skipped" >> $GITHUB_STEP_SUMMARY
+              echo "**Reason:** $DEPLOY_REASON" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "To enable deployment, configure these GitHub Secrets:" >> $GITHUB_STEP_SUMMARY
+              echo "- \`DEPLOY_HOST\` - Server hostname or IP" >> $GITHUB_STEP_SUMMARY
+              echo "- \`DEPLOY_USER\` - SSH username" >> $GITHUB_STEP_SUMMARY
+              echo "- \`DEPLOY_KEY\` - Base64-encoded SSH private key" >> $GITHUB_STEP_SUMMARY
+              ;;
+            failed)
+              echo "### ❌ Deploy Failed" >> $GITHUB_STEP_SUMMARY
+              if [ -f /tmp/deploy.log ]; then
+                echo "<details><summary>View logs</summary>" >> $GITHUB_STEP_SUMMARY
+                echo "" >> $GITHUB_STEP_SUMMARY
+                echo '```' >> $GITHUB_STEP_SUMMARY
+                tail -50 /tmp/deploy.log >> $GITHUB_STEP_SUMMARY
+                echo '```' >> $GITHUB_STEP_SUMMARY
+                echo "</details>" >> $GITHUB_STEP_SUMMARY
+              fi
+              ;;
+            *)
+              echo "### ⚠️ Deploy status unknown" >> $GITHUB_STEP_SUMMARY
+              ;;
+          esac
+
+  # Post combined summary
+  summary:
+    runs-on: ubuntu-latest
+    needs: [test, docker-build, deploy]
+    if: always()
+    steps:
+      - name: Generate CI Summary
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const testResult = '${{ needs.test.result }}';
+            const dockerResult = '${{ needs.docker-build.result }}';
+            const deployResult = '${{ needs.deploy.result }}';
+            const isPR = '${{ github.event_name }}' === 'pull_request';
+            const sha = '${{ github.sha }}'.substring(0, 7);
+
+            const statusEmoji = (result) => {
+              switch(result) {
+                case 'success': return '✅';
+                case 'failure': return '❌';
+                case 'skipped': return '⏭️';
+                default: return '⚠️';
+              }
+            };
+
+            let body = `## 🤖 CI Summary\n\n`;
+            body += `**Commit:** \`${sha}\`\n\n`;
+            body += `| Stage | Status |\n`;
+            body += `|-------|--------|\n`;
+            body += `| Tests | ${statusEmoji(testResult)} ${testResult} |\n`;
+            body += `| Docker Build | ${statusEmoji(dockerResult)} ${dockerResult} |\n`;
+            body += `| Deploy | ${statusEmoji(deployResult)} ${deployResult} |\n`;
+            body += `\n`;
+
+            // Add notes for specific conditions
+            const notes = [];
+
+            if (testResult === 'failure') {
+              notes.push('❌ **Tests failed** - check test output for details');
+            }
+
+            if (dockerResult === 'failure') {
+              notes.push('❌ **Docker build failed** - check container logs for errors');
+            }
+
+            if (deployResult === 'skipped') {
+              notes.push('⏭️ **Deploy skipped** - secrets not configured or invalid SSH key');
+            } else if (deployResult === 'failure') {
+              notes.push('❌ **Deploy failed** - check deploy logs for details');
+            }
+
+            if (notes.length > 0) {
+              body += `### ⚠️ Issues\n`;
+              notes.forEach(note => {
+                body += `- ${note}\n`;
+              });
+            } else if (testResult === 'success' && dockerResult === 'success' && deployResult === 'success') {
+              body += `### 🎉 All checks passed!\n`;
+            }
+
+            body += `\n---\n*Generated by CI workflow*`;
+
+            // Write to step summary (always visible)
+            const fs = require('fs');
+            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, body);
+
+            // Post as PR comment if this is a pull request
+            if (isPR && context.issue && context.issue.number) {
+              try {
+                const { data: comments } = await github.rest.issues.listComments({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: context.issue.number,
+                });
+
+                const botComment = comments.find(c =>
+                  c.user.type === 'Bot' && c.body.includes('🤖 CI Summary')
+                );
+
+                if (botComment) {
+                  await github.rest.issues.updateComment({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    comment_id: botComment.id,
+                    body: body
+                  });
+                } else {
+                  await github.rest.issues.createComment({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: context.issue.number,
+                    body: body
+                  });
+                }
+              } catch (e) {
+                console.log('Could not post PR comment:', e.message);
+              }
+            }
+
+            // For pushes, post as commit comment
+            if (!isPR) {
+              try {
+                await github.rest.repos.createCommitComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  commit_sha: '${{ github.sha }}',
+                  body: body
+                });
+              } catch (e) {
+                console.log('Could not post commit comment:', e.message);
+              }
+            }
