@@ -1,9 +1,9 @@
 import streamlit as st
-from ui.styles import apply_styles
-from ui.sidebar import render_sidebar
-from ui.dashboard import render_header_stats
-from ui.tabs import render_all_tabs
-from ui.helpers import api
+from app.ui.styles import apply_styles
+from app.ui.sidebar import render_sidebar
+from app.ui.dashboard import render_header_stats
+from app.ui.tabs import render_all_tabs
+from app.ui.helpers import api
 
 st.set_page_config(
     page_title="URLPulse",
