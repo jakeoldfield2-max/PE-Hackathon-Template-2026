@@ -1,13 +1,22 @@
 #!/usr/bin/env bash
 # chaos.sh — Chaos engineering scripts for URLPulse
 #
-# Usage:
-#   ./scripts/chaos.sh kill-one       Kill 1 app instance, verify 2 still serve
-#   ./scripts/chaos.sh kill-all       Kill all app instances, wait for alert
-#   ./scripts/chaos.sh error-flood    Send 200 bad requests to trigger HighErrorRate
-#   ./scripts/chaos.sh kill-db        Kill PostgreSQL, show /health vs /ready difference
-#   ./scripts/chaos.sh kill-redis     Kill Redis, verify graceful degradation
-#   ./scripts/chaos.sh full-demo      Run all chaos tests sequentially
+# Usage (local — run against local Docker stack):
+#   ./scripts/chaos.sh kill-one
+#   ./scripts/chaos.sh full-demo
+#
+# Usage (remote — run against hosted VM):
+#   ./scripts/chaos.sh --remote kill-one          # Uses gcloud SSH
+#   ./scripts/chaos.sh --remote error-flood       # Sends requests to VM IP
+#   ./scripts/chaos.sh --remote full-demo
+#
+# Modes:
+#   kill-one      Kill 1 app instance, verify 2 still serve
+#   kill-all      Kill all instances, wait for Discord alert
+#   error-flood   Send 200 bad requests to trigger HighErrorRate alert
+#   kill-db       Kill PostgreSQL, show /health vs /ready difference
+#   kill-redis    Kill Redis, verify graceful degradation
+#   full-demo     Run all chaos tests sequentially
 #
 # All modes auto-recover — containers have restart:always
 
@@ -19,7 +28,41 @@ YELLOW='\033[1;33m'
 CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
-BASE_URL="${BASE_URL:-http://localhost}"
+# ── Remote mode ──────────────────────────────────────────────────────────────
+REMOTE="false"
+VM_NAME="${VM_NAME:-urlpulse-vm}"
+ZONE="${ZONE:-us-central1-a}"
+APP_DIR="PE-Hackathon-Template-2026"
+
+if [ "${1:-}" = "--remote" ]; then
+  REMOTE="true"
+  shift
+fi
+
+if [ "$REMOTE" = "true" ]; then
+  # Get VM IP for curl-based checks
+  VM_IP=$(gcloud compute addresses describe urlpulse-ip --region="${ZONE%-*}" --format='value(address)' 2>/dev/null || echo "")
+  if [ -z "$VM_IP" ]; then
+    VM_IP=$(gcloud compute instances describe "$VM_NAME" --zone="$ZONE" --format='get(networkInterfaces[0].accessConfigs[0].natIP)' 2>/dev/null || echo "")
+  fi
+  if [ -z "$VM_IP" ]; then
+    echo "ERROR: Could not determine VM IP. Check gcloud config."
+    exit 1
+  fi
+  BASE_URL="http://$VM_IP"
+  echo -e "${CYAN}[chaos]${NC} Remote mode: targeting $VM_NAME ($VM_IP)"
+else
+  BASE_URL="${BASE_URL:-http://localhost}"
+fi
+
+# Run a docker compose command — locally or via SSH
+run_docker() {
+  if [ "$REMOTE" = "true" ]; then
+    gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="cd $APP_DIR && docker compose $1" 2>/dev/null
+  else
+    docker compose $1
+  fi
+}
 
 log()  { echo -e "${CYAN}[chaos]${NC} $1"; }
 pass() { echo -e "${GREEN}[PASS]${NC} $1"; }
@@ -61,7 +104,7 @@ kill_one() {
   echo ""
 
   log "Killing app-1..."
-  docker compose stop app-1
+  run_docker "stop app-1"
 
   sleep 2
 
@@ -75,14 +118,14 @@ kill_one() {
 
   # Show which instances are running
   log "Running instances:"
-  docker compose ps --format "table {{.Name}}\t{{.Status}}" | grep app
+  run_docker "ps --format 'table {{.Name}}\t{{.Status}}'" | grep app
 
   log "Restarting app-1..."
-  docker compose start app-1
+  run_docker "start app-1"
   sleep 3
 
   pass "app-1 restarted. All 3 instances serving."
-  docker compose ps --format "table {{.Name}}\t{{.Status}}" | grep app
+  run_docker "ps --format 'table {{.Name}}\t{{.Status}}'" | grep app
   echo ""
 }
 
@@ -94,7 +137,7 @@ kill_all() {
   echo ""
 
   log "Killing all app instances..."
-  docker compose stop app-1 app-2 app-3
+  run_docker "stop app-1 app-2 app-3"
 
   local status
   status=$(check_health)
@@ -109,7 +152,7 @@ kill_all() {
   sleep 30
 
   log "Restarting all instances..."
-  docker compose start app-1 app-2 app-3
+  run_docker "start app-1 app-2 app-3"
 
   wait_for_recovery "app instances"
   echo ""
@@ -120,21 +163,29 @@ error_flood() {
   echo ""
   log "=== CHAOS: Error Flood ==="
   log "Proves: HighErrorRate alert triggers when error rate > 10%"
+  log "Target: $BASE_URL"
   echo ""
 
-  log "Sending 200 bad requests to trigger errors..."
+  log "Sending sustained 5xx errors for ~3 minutes to trigger alert..."
+  log "  (Alert rule requires error rate > 5% for 2 consecutive minutes)"
   local error_count=0
-  for i in $(seq 1 200); do
-    local status
-    status=$(curl -sf -o /dev/null -w "%{http_code}" "$BASE_URL/users/99999" 2>/dev/null || echo "000")
-    if [ "$status" != "200" ]; then
+  local total=0
+  local end_time=$((SECONDS + 180))
+  while [ $SECONDS -lt $end_time ]; do
+    for i in $(seq 1 10); do
+      curl -sf -o /dev/null "$BASE_URL/chaos/error" 2>/dev/null || true
       error_count=$((error_count + 1))
-    fi
+      total=$((total + 1))
+    done
+    # Mix in a few good requests so the rate calculation has a denominator
+    curl -sf -o /dev/null "$BASE_URL/health" 2>/dev/null || true
+    total=$((total + 1))
+    sleep 1
   done
 
-  pass "Sent 200 requests, $error_count returned errors"
-  warn "Check Discord for HighErrorRate alert (~60s)..."
-  log "Check Prometheus: http://localhost:9090/alerts"
+  pass "Sent $total requests ($error_count were 5xx errors)"
+  warn "Check Discord for HighErrorRate alert (should fire soon)..."
+  log "Check Prometheus: ${BASE_URL}:9090/alerts"
   echo ""
 }
 
@@ -153,7 +204,7 @@ kill_db() {
   log "  /health: $health_before  /ready: $ready_before"
 
   log "Killing PostgreSQL..."
-  docker compose stop postgres
+  run_docker "stop postgres"
 
   sleep 3
 
@@ -175,7 +226,7 @@ kill_db() {
   fi
 
   log "Restarting PostgreSQL..."
-  docker compose start postgres
+  run_docker "start postgres"
 
   # Wait for postgres to be healthy
   sleep 10
@@ -204,7 +255,7 @@ kill_redis() {
   log "  $cache_header"
 
   log "Killing Redis..."
-  docker compose stop redis
+  run_docker "stop redis"
 
   sleep 2
 
@@ -226,7 +277,7 @@ kill_redis() {
   fi
 
   log "Restarting Redis..."
-  docker compose start redis
+  run_docker "start redis"
   sleep 3
 
   pass "Redis back online. Cache warming up."
@@ -255,7 +306,7 @@ full_demo() {
   echo -e "${GREEN}╚════════════════════════════════════════╝${NC}"
   echo ""
   log "Final status:"
-  docker compose ps --format "table {{.Name}}\t{{.Status}}" | grep -E "app|postgres|redis|nginx"
+  run_docker "ps --format 'table {{.Name}}\t{{.Status}}'" | grep -E "app|postgres|redis|nginx"
 }
 
 # ── Main ─────────────────────────────────────────────────────────────────────
@@ -267,7 +318,7 @@ case "${1:-help}" in
   kill-redis)   kill_redis ;;
   full-demo)    full_demo ;;
   *)
-    echo "Usage: ./scripts/chaos.sh <mode>"
+    echo "Usage: ./scripts/chaos.sh [--remote] <mode>"
     echo ""
     echo "Modes:"
     echo "  kill-one      Kill 1 app instance, verify 2 still serve"
@@ -276,5 +327,14 @@ case "${1:-help}" in
     echo "  kill-db       Kill PostgreSQL, show /health vs /ready"
     echo "  kill-redis    Kill Redis, verify graceful degradation"
     echo "  full-demo     Run all chaos tests sequentially"
+    echo ""
+    echo "Options:"
+    echo "  --remote      Run against hosted VM (uses gcloud SSH for docker commands)"
+    echo "                Without --remote, runs against local Docker stack"
+    echo ""
+    echo "Examples:"
+    echo "  ./scripts/chaos.sh kill-one                # Local"
+    echo "  ./scripts/chaos.sh --remote kill-one       # Remote VM"
+    echo "  ./scripts/chaos.sh --remote full-demo      # Full demo on VM"
     ;;
 esac

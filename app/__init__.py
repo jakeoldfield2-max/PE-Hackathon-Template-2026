@@ -115,6 +115,12 @@ def create_app():
     def internal_error(e):
         return jsonify(error="Internal server error", status=500), 500
 
+    # --- Chaos testing endpoint ---
+    @app.route("/chaos/error")
+    def chaos_error():
+        """Returns 500 on purpose — used by chaos.sh error-flood to trigger HighErrorRate alert."""
+        return jsonify(error="Intentional chaos error", status=500), 500
+
     # --- Health & Readiness ---
 
     @app.route("/health")

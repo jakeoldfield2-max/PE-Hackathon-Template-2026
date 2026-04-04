@@ -30,7 +30,12 @@ def render_tab_users(BASE):
         st.rerun()
 
     _, ur = api("GET", "/users", BASE)
-    all_users = ur if isinstance(ur, list) else []
+    if isinstance(ur, list):
+        all_users = ur
+    elif isinstance(ur, dict) and "users" in ur:
+        all_users = ur.get("users", [])
+    else:
+        all_users = []
 
     if not all_users:
         st.markdown('<div class="alert-warn">No users yet — run POST /seed or create one above</div>', unsafe_allow_html=True)
