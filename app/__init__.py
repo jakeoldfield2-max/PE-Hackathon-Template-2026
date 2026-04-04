@@ -44,6 +44,7 @@ def create_app():
     app = Flask(__name__)
 
     # Skip PostgreSQL init in test mode - tests use SQLite via conftest.py
+    # Entire DB setup is wrapped in try-except so app can start for /health checks
     if not os.environ.get("TESTING"):
         db_host = os.environ.get("DATABASE_HOST", "localhost")
         db_name = os.environ.get("DATABASE_NAME", "hackathon_db")
@@ -60,23 +61,16 @@ def create_app():
         try:
             init_db(app)
             _log_startup_event("INFO", "Database proxy initialized successfully")
-        except Exception as e:
-            _log_startup_event("ERROR", "Failed to initialize database proxy",
-                               error_type=type(e).__name__,
-                               error_message=str(e),
-                               traceback=traceback.format_exc())
 
-        from app.models.user import User
-        from app.models.url import Url
-        from app.models.event import Event
+            from app.models.user import User
+            from app.models.url import Url
+            from app.models.event import Event
 
-        # Create tables if they don't exist
-        # Wrapped in try/except so app can start even without DB (for /health checks)
-        try:
+            # Create tables if they don't exist
             db.create_tables([User, Url, Event], safe=True)
             _log_startup_event("INFO", "Database tables created/verified successfully")
         except Exception as e:
-            _log_startup_event("WARNING", "Could not create tables - database may be unavailable",
+            _log_startup_event("WARNING", "Database initialization failed - app will start without DB",
                                error_type=type(e).__name__,
                                error_message=str(e),
                                traceback=traceback.format_exc(),

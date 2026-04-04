@@ -28,7 +28,15 @@ def init_db(app):
 
     @app.before_request
     def _db_connect():
-        db.connect(reuse_if_open=True)
+        # Skip DB connection for health checks - they should work without DB
+        from flask import request
+        if request.path == "/health":
+            return
+        try:
+            db.connect(reuse_if_open=True)
+        except Exception:
+            # Let request proceed - route handlers will fail gracefully if they need DB
+            pass
 
     @app.teardown_appcontext
     def _db_close(exc):
