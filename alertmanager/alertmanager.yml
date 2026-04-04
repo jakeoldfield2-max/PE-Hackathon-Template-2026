@@ -11,5 +11,5 @@ route:
 receivers:
   - name: discord
     webhook_configs:
-      - url: __DISCORD_WEBHOOK_URL__
+      - url: http://discord-webhook:9095/
         send_resolved: true

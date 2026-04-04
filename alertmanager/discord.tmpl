@@ -1,0 +1,3 @@
+{{ define "discord.message" }}
+{"content": "**{{ .Status | toUpper }}**: {{ .CommonLabels.alertname }}\n{{ range .Alerts }}{{ .Annotations.description }}\n{{ end }}"}
+{{ end }}

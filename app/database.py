@@ -13,8 +13,8 @@ class BaseModel(Model):
 def init_db(app):
     host = os.environ.get("DATABASE_HOST", "localhost")
 
-    # Use SSL for remote connections (e.g., Supabase)
-    ssl_mode = "require" if host != "localhost" else None
+    # Use SSL for remote connections (e.g., Supabase), not for local Docker
+    ssl_mode = "require" if host not in ("localhost", "postgres") else None
 
     database = PostgresqlDatabase(
         os.environ.get("DATABASE_NAME", "hackathon_db"),
@@ -28,7 +28,15 @@ def init_db(app):
 
     @app.before_request
     def _db_connect():
-        db.connect(reuse_if_open=True)
+        # Skip DB connection for health checks - they should work without DB
+        from flask import request
+        if request.path == "/health":
+            return
+        try:
+            db.connect(reuse_if_open=True)
+        except Exception:
+            # Let request proceed - route handlers will fail gracefully if they need DB
+            pass
 
     @app.teardown_appcontext
     def _db_close(exc):

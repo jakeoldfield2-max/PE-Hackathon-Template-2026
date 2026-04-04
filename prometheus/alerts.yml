@@ -3,13 +3,16 @@ groups:
     rules:
       - alert: ServiceDown
         expr: up{job="urlpulse"} == 0
-        for: 1m
+        for: 15s
         labels:
           severity: critical
           service: urlpulse
         annotations:
           summary: "URLPulse instance down"
-          description: "Instance {{ $labels.instance }} is unreachable for more than 1 minute."
+          description: "Instance {{ $labels.instance }} is unreachable."
+          impact: "Reduced capacity. Traffic shifted to remaining instances."
+          runbook: "docs/runbooks/SERVICE_DOWN.md"
+          action: "1. Check logs: docker compose logs {{ $labels.instance | reReplaceAll \":.*\" \"\" }} --tail 50  2. Restart: docker compose restart {{ $labels.instance | reReplaceAll \":.*\" \"\" }}"
 
       - alert: HighErrorRate
         expr: |
@@ -22,7 +25,10 @@ groups:
           service: urlpulse
         annotations:
           summary: "High 5xx error rate"
-          description: "5xx error rate is above 5% for 2 minutes."
+          description: "5xx error rate is {{ $value | humanizePercentage }} (threshold: 5%)."
+          impact: "Users experiencing failed requests. SLA at risk."
+          runbook: "docs/runbooks/HIGH_ERROR_RATE.md"
+          action: "1. Check logs for exceptions  2. Verify database: curl http://localhost/ready  3. Check recent deployments"
 
       - alert: HighLatency
         expr: |
@@ -36,7 +42,10 @@ groups:
           service: urlpulse
         annotations:
           summary: "High p95 latency"
-          description: "p95 request latency is above 2 seconds for 2 minutes."
+          description: "p95 latency is {{ $value | humanizeDuration }} (threshold: 2s)."
+          impact: "Slow user experience. Risk of timeouts."
+          runbook: "docs/runbooks/HIGH_LATENCY.md"
+          action: "1. Check traffic spike in Grafana  2. Check database queries  3. Verify Redis cache"
 
       - alert: HighMemoryUsage
         expr: process_resident_memory_bytes > 500000000
@@ -46,4 +55,7 @@ groups:
           service: urlpulse
         annotations:
           summary: "High process memory usage"
-          description: "Process RSS memory is above 500MB for 2 minutes."
+          description: "Instance {{ $labels.instance }} memory is {{ $value | humanize1024 }}B (threshold: 500MB)."
+          impact: "Risk of OOM crash. May affect performance."
+          runbook: "docs/runbooks/HIGH_MEMORY_USAGE.md"
+          action: "1. Check docker stats  2. Restart container: docker compose restart {{ $labels.instance | reReplaceAll \":.*\" \"\" }}  3. Monitor for memory leak"
