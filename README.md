@@ -82,6 +82,7 @@ cp .env.example .env
 # Docker startup fails fast when required secrets are missing.
 
 # 2. Start backend (3 app instances, Nginx, PostgreSQL, Redis, Prometheus, Grafana)
+# 2. Start backend (3 app instances, Nginx, PostgreSQL, Redis, Prometheus, Grafana)
 docker compose up -d --build
 
 # 3. Seed demo data
@@ -92,10 +93,24 @@ uv run streamlit run app/ui_app.py
 # UI opens at http://localhost:8501
 
 # 5. Verify backend
+# 4. Start frontend (Streamlit UI — runs outside Docker)
+uv run streamlit run app/ui_app.py
+# UI opens at http://localhost:8501
+
+# 5. Verify backend
 curl http://localhost/health    # → {"status":"ok"}
 curl http://localhost/ready     # → {"status":"ready","database":"connected"}
 curl http://localhost/stats     # → {"total_users":3,"total_urls":10,...}
 curl http://localhost/users     # → cached response (check X-Cache header)
+```
+
+| Service | URL |
+|---------|-----|
+| Backend API (via Nginx) | http://localhost |
+| Streamlit UI | http://localhost:8501 |
+| Grafana | http://localhost:3000 |
+| Prometheus | http://localhost:9090 |
+| Alertmanager | http://localhost:9093 |
 ```
 
 | Service | URL |
@@ -128,17 +143,27 @@ uv sync
 # 2. Configure environment
 cp .env.example .env
 # Override these values in .env:
+# Override these values in .env:
 #   DATABASE_HOST=localhost
 #   REDIS_HOST=localhost
 # For Supabase, replace DATABASE_* values with Supabase credentials.
+# For local PostgreSQL:
 # For local PostgreSQL:
 #   brew install postgresql@16 && brew services start postgresql@16
 #   createdb hackathon_db
 
 # 3. Start backend API
+# 3. Start backend API
 uv run run.py
 # Backend starts at http://localhost:5000
+# Backend starts at http://localhost:5000
 
+# 4. Start frontend (in a separate terminal)
+uv run streamlit run app/ui_app.py
+# UI opens at http://localhost:8501
+
+# 5. Verify
+curl http://localhost:5000/health   # → {"status":"ok"}
 # 4. Start frontend (in a separate terminal)
 uv run streamlit run app/ui_app.py
 # UI opens at http://localhost:8501
@@ -167,6 +192,8 @@ urlpulse/
 │   ├── database.py          # DB connection + BaseModel
 │   ├── ui_app.py            # Streamlit frontend (run separately)
 │   ├── ui/                  # Streamlit components (sidebar, tabs, styles)
+│   ├── ui_app.py            # Streamlit frontend (run separately)
+│   ├── ui/                  # Streamlit components (sidebar, tabs, styles)
 │   ├── models/
 │   │   ├── user.py          # User model
 │   │   ├── url.py           # Url model
@@ -182,8 +209,7 @@ urlpulse/
 ├── scripts/
 │   ├── provision.sh         # One-time GCP VM setup (idempotent)
 │   ├── setup-vm.sh          # Create .env, start app, seed data on VM
-│   ├── deploy.sh            # SSH deploy to GCP VM (+ rollback)
-│   └── chaos.sh             # Chaos engineering (kill instances, DB, Redis)
+│   └── deploy.sh            # SSH deploy to GCP VM (+ rollback)
 ├── docs/                    # Architecture, decisions, deploy guide, runbooks
 ├── .env.example             # Common env schema (Docker baseline + minimal overrides)
 ├── Dockerfile               # Python 3.13 + Gunicorn
@@ -196,6 +222,10 @@ urlpulse/
 ## Deployment
 
 ```bash
+./scripts/provision.sh --project pe-hackathon-template-2026  # Create VM, firewall, Docker
+./scripts/setup-vm.sh              # Create .env, start app, seed data (prompts for secrets)
+./scripts/deploy.sh                # Deploy latest main via SSH
+./scripts/deploy.sh --rollback     # Revert last deploy
 ./scripts/provision.sh --project pe-hackathon-template-2026  # Create VM, firewall, Docker
 ./scripts/setup-vm.sh              # Create .env, start app, seed data (prompts for secrets)
 ./scripts/deploy.sh                # Deploy latest main via SSH
@@ -224,27 +254,12 @@ curl http://$VM_IP/stats
 # Grafana:      http://$VM_IP:3000
 # Prometheus:   http://$VM_IP:9090
 # Alertmanager: http://$VM_IP:9093
+
+# Load tests against hosted app
+k6 run --env BASE_URL=http://$VM_IP tests/load/baseline.js   # Bronze (50 VUs)
+k6 run --env BASE_URL=http://$VM_IP tests/load/scale.js      # Silver (200 VUs)
+k6 run --env BASE_URL=http://$VM_IP tests/load/tsunami.js    # Gold (500 VUs)
 ```
-
-## Load Testing & Chaos Engineering
-
-```bash
-# Install k6: brew install k6
-
-# Load tests (run in order — Bronze → Silver → Gold)
-k6 run --env BASE_URL=http://$VM_IP tests/load/baseline.js   # 50 VUs
-k6 run --env BASE_URL=http://$VM_IP tests/load/scale.js      # 200 VUs
-k6 run --env BASE_URL=http://$VM_IP tests/load/tsunami.js    # 500 VUs
-
-# Chaos tests (break things, prove recovery)
-./scripts/chaos.sh kill-one      # Kill 1 instance, verify 2 still serve
-./scripts/chaos.sh kill-db       # Show /health vs /ready difference
-./scripts/chaos.sh kill-redis    # Verify graceful degradation
-./scripts/chaos.sh error-flood   # Trigger HighErrorRate alert → Discord
-./scripts/chaos.sh full-demo     # Run all chaos tests sequentially
-```
-
-See [docs/LOAD_AND_CHAOS.md](docs/LOAD_AND_CHAOS.md) for the full guide — tier breakdowns, what each test proves, recommended demo order, and how to interpret results.
 
 ## Documentation
 
