@@ -1,6 +1,6 @@
 import streamlit as st
 import json
-from ui.helpers import api, gen_code
+from app.ui.helpers import api, gen_code
 
 def render_tab_shorten(BASE, user_map):
     st.markdown('<div class="section-label">— new short link</div>', unsafe_allow_html=True)
