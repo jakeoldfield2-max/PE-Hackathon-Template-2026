@@ -9,25 +9,57 @@ Reference: CAPACITY.md bottleneck analysis, tsunami.js cache assertions.
 import json
 import os
 import logging
+from redis import ConnectionPool
 
 logger = logging.getLogger(__name__)
 
+_redis_pool = None
 _redis_client = None
 
 
+def _get_redis_pool():
+    """Initialize and return the Redis connection pool."""
+    global _redis_pool
+    if _redis_pool is not None:
+        return _redis_pool
+
+    try:
+        host = os.environ.get("REDIS_HOST", "localhost")
+        port = int(os.environ.get("REDIS_PORT", 6379))
+
+        _redis_pool = ConnectionPool(
+            host=host,
+            port=port,
+            db=0,
+            max_connections=50,
+            socket_timeout=30,
+            socket_connect_timeout=5,
+            socket_keepalive=True,
+            health_check_interval=30,
+            decode_responses=True
+        )
+        logger.info("Redis connection pool initialized at %s:%s", host, port)
+        return _redis_pool
+    except Exception as e:
+        logger.warning("Failed to initialize Redis pool: %s", e)
+        return None
+
+
 def get_redis():
-    """Lazy-init Redis connection. Returns None if Redis unavailable."""
+    """Get a Redis client from the pool. Returns None if Redis unavailable."""
     global _redis_client
     if _redis_client is not None:
         return _redis_client
 
     try:
         import redis
-        host = os.environ.get("REDIS_HOST", "localhost")
-        port = int(os.environ.get("REDIS_PORT", 6379))
-        _redis_client = redis.Redis(host=host, port=port, decode_responses=True)
+        pool = _get_redis_pool()
+        if pool is None:
+            return None
+
+        _redis_client = redis.Redis(connection_pool=pool)
         _redis_client.ping()
-        logger.info("Redis connected at %s:%s", host, port)
+        logger.info("Redis client connected via connection pool")
         return _redis_client
     except Exception:
         # WHY graceful degradation: If Redis is down, app still works
@@ -46,6 +78,33 @@ def cache_get(key):
     try:
         val = r.get(key)
         if val is not None:
+            return json.loads(val)
+    except Exception:
+        pass
+    return None
+
+
+def cache_get_and_refresh(key, ttl=5):
+    """Get a cached value and refresh its TTL (sliding window cache).
+
+    This extends the cache lifetime on each access. If no requests come
+    within the TTL period, the cache expires and releases the memory.
+
+    Args:
+        key: The cache key to fetch
+        ttl: Time-to-live in seconds to reset on each hit (default: 5s)
+
+    Returns:
+        The cached value, or None on miss or Redis unavailable.
+    """
+    r = get_redis()
+    if r is None:
+        return None
+    try:
+        val = r.get(key)
+        if val is not None:
+            # Refresh TTL on hit - extends the sliding window
+            r.expire(key, ttl)
             return json.loads(val)
     except Exception:
         pass
