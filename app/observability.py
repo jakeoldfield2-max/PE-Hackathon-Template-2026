@@ -1,5 +1,4 @@
 import time
-import sys
 from typing import Dict
 
 from flask import Response, g, request
@@ -8,6 +7,7 @@ from prometheus_client import (
     Counter,
     Gauge,
     Histogram,
+    REGISTRY,
     generate_latest,
 )
 
@@ -25,10 +25,33 @@ REQUEST_DURATION = Histogram(
 
 ACTIVE_URLS_GAUGE = Gauge("urlpulse_active_urls", "Number of active short URLs")
 ACTIVE_USERS_GAUGE = Gauge("urlpulse_active_users", "Number of active users")
-PROCESS_MEMORY_GAUGE = Gauge(
-    "process_resident_memory_bytes",
-    "Resident memory size in bytes",
-)
+
+
+def _has_process_memory_metric() -> bool:
+    names_to_collectors = getattr(REGISTRY, "_names_to_collectors", {})
+    return "process_resident_memory_bytes" in names_to_collectors
+
+
+if not _has_process_memory_metric():
+    PROCESS_MEMORY_GAUGE = Gauge(
+        "process_resident_memory_bytes",
+        "Resident memory size in bytes",
+    )
+
+
+def _process_resident_memory_bytes() -> int:
+    try:
+        import resource
+
+        rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+        return rss if rss >= 0 else 0
+    except Exception:
+        return 0
+
+
+def update_system_metrics() -> None:
+    if "PROCESS_MEMORY_GAUGE" in globals():
+        PROCESS_MEMORY_GAUGE.set(_process_resident_memory_bytes())
 
 
 def _endpoint_label() -> str:
@@ -41,26 +64,9 @@ def before_request_metrics() -> None:
     g.request_start_time = time.perf_counter()
 
 
-def _process_resident_memory_bytes() -> int:
-    try:
-        import resource
-
-        rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
-        if sys.platform == "darwin":
-            return rss
-        return rss * 1024
-    except Exception:
-        return 0
-
-
-def update_system_metrics() -> None:
-    PROCESS_MEMORY_GAUGE.set(_process_resident_memory_bytes())
-
-
 def after_request_metrics(response: Response) -> Response:
     start_time = getattr(g, "request_start_time", None)
     if start_time is None:
-        update_system_metrics()
         return response
 
     duration = time.perf_counter() - start_time
