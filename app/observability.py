@@ -87,8 +87,27 @@ def after_request_metrics(response: Response) -> Response:
 
 def metrics_response() -> Response:
     update_system_metrics()
+    _refresh_business_metrics()
     payload = generate_latest()
     return Response(payload, mimetype=CONTENT_TYPE_LATEST)
+
+
+def _refresh_business_metrics() -> None:
+    """Refresh business metrics from database on each Prometheus scrape."""
+    try:
+        from app.models.url import Url
+
+        active_urls = Url.select().where(Url.is_active == True).count()  # noqa: E712
+        active_users = (
+            Url.select(Url.user_id)
+            .where(Url.is_active == True)  # noqa: E712
+            .distinct()
+            .count()
+        )
+        ACTIVE_URLS_GAUGE.set(active_urls)
+        ACTIVE_USERS_GAUGE.set(active_users)
+    except Exception:
+        pass  # Don't fail metrics if DB query fails
 
 
 def update_business_metrics(active_urls: int, active_users: int) -> None:

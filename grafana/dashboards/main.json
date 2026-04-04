@@ -6,7 +6,7 @@
   "links": [],
   "panels": [
     {
-      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
       "fieldConfig": {"defaults": {"unit": "reqps"}, "overrides": []},
       "gridPos": {"h": 8, "w": 6, "x": 0, "y": 0},
       "id": 1,
@@ -15,7 +15,7 @@
       "type": "timeseries"
     },
     {
-      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
       "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
       "gridPos": {"h": 8, "w": 6, "x": 6, "y": 0},
       "id": 2,
@@ -24,16 +24,16 @@
       "type": "timeseries"
     },
     {
-      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
       "fieldConfig": {"defaults": {"unit": "percentunit"}, "overrides": []},
       "gridPos": {"h": 8, "w": 6, "x": 12, "y": 0},
       "id": 3,
-      "targets": [{"expr": "sum(rate(http_requests_total{status=~\"5..\"}[5m])) / sum(rate(http_requests_total[5m]))", "refId": "A"}],
-      "title": "Error Rate",
+      "targets": [{"expr": "sum(rate(http_requests_total{status=~\"[45]..\"}[5m])) / sum(rate(http_requests_total[5m]))", "refId": "A"}],
+      "title": "Error Rate (4xx+5xx)",
       "type": "timeseries"
     },
     {
-      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
       "fieldConfig": {"defaults": {"unit": "bytes"}, "overrides": []},
       "gridPos": {"h": 8, "w": 6, "x": 18, "y": 0},
       "id": 4,
@@ -42,25 +42,25 @@
       "type": "timeseries"
     },
     {
-      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
       "fieldConfig": {"defaults": {"unit": "none"}, "overrides": []},
       "gridPos": {"h": 8, "w": 6, "x": 0, "y": 8},
       "id": 5,
-      "targets": [{"expr": "urlpulse_active_urls", "refId": "A"}],
+      "targets": [{"expr": "urlpulse_active_urls", "refId": "A", "legendFormat": "{{instance}}"}],
       "title": "Active URLs",
       "type": "timeseries"
     },
     {
-      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
       "fieldConfig": {"defaults": {"unit": "none"}, "overrides": []},
       "gridPos": {"h": 8, "w": 6, "x": 6, "y": 8},
       "id": 6,
-      "targets": [{"expr": "urlpulse_active_users", "refId": "A"}],
+      "targets": [{"expr": "urlpulse_active_users", "refId": "A", "legendFormat": "{{instance}}"}],
       "title": "Active Users",
       "type": "timeseries"
     },
     {
-      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
       "fieldConfig": {"defaults": {"unit": "none"}, "overrides": []},
       "gridPos": {"h": 8, "w": 6, "x": 12, "y": 8},
       "id": 7,
@@ -69,7 +69,7 @@
       "type": "timeseries"
     },
     {
-      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
       "fieldConfig": {"defaults": {"unit": "none"}, "overrides": []},
       "gridPos": {"h": 8, "w": 6, "x": 18, "y": 8},
       "id": 8,

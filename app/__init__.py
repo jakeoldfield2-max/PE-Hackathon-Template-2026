@@ -19,7 +19,12 @@ def create_app():
 
     init_db(app)
 
-    from app import models  # noqa: F401 - registers models with Peewee
+    from app.models.user import User
+    from app.models.url import Url
+    from app.models.event import Event
+
+    # Create tables if they don't exist
+    db.create_tables([User, Url, Event], safe=True)
 
     attach_request_id_handlers(app)
     app.before_request(before_request_metrics)
