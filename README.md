@@ -193,7 +193,8 @@ urlpulse/
 ## Deployment
 
 ```bash
-./scripts/provision.sh            # One-time: create GCP VM, firewall, Docker
+./scripts/provision.sh --project pe-hackathon-template-2026  # Safer: explicit project
+./scripts/provision.sh --yes      # Non-interactive mode (CI/automation)
 ./scripts/deploy.sh               # Deploy latest main via SSH
 ./scripts/deploy.sh --rollback    # Revert last deploy
 ```

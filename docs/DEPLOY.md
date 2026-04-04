@@ -1,6 +1,6 @@
 # Deployment Guide
 
-> All deployment is scripted. No manual commands needed.
+> Fully scripted. No manual GCP Console steps needed.
 
 ---
 
@@ -8,8 +8,8 @@
 
 | Script | What it does |
 |--------|-------------|
-| `scripts/provision.sh` | Creates GCP VM, static IP, firewall rules, installs Docker, clones repo |
-| `scripts/deploy.sh` | SSHes into VM, pulls latest code, rebuilds containers, health checks |
+| `scripts/provision.sh` | Creates VM, static IP, firewall, installs Docker, clones repo, generates CI deploy key |
+| `scripts/deploy.sh` | SSHes into VM, pulls latest, rebuilds containers, runs health check |
 | `scripts/deploy.sh --rollback` | Reverts last commit on VM and redeploys |
 
 ---
@@ -17,35 +17,39 @@
 ## First-Time Setup
 
 ```bash
-# 1. Authenticate with GCP
-gcloud auth login
-gcloud config set project <your-project-id>
+# 1. Provision (validates account, project, billing, APIs — then creates everything)
+./scripts/provision.sh --project <your-project-id>
 
-# 2. Provision the VM (idempotent — safe to re-run)
-./scripts/provision.sh
-
-# 3. SSH in, create .env, start the app
+# 2. SSH in, create .env, start the app
 gcloud compute ssh urlpulse-vm --zone=us-central1-a
 cd PE-Hackathon-Template-2026 && cp .env.example .env && nano .env
 docker compose up -d --build
 
-# 4. Set GitHub Secrets for CI deploy (values printed by provision.sh)
-#    DEPLOY_HOST=<static-ip>
-#    DEPLOY_USER=<ssh-user>
-#    DEPLOY_KEY=<base64-ssh-key>
+# 3. Add the GitHub Secrets printed by provision.sh (DEPLOY_HOST, DEPLOY_USER, DEPLOY_KEY)
 ```
 
-After this, every push to `main` auto-deploys via CI.
+That's it. Every push to `main` now auto-deploys via CI.
+
+---
+
+## What provision.sh validates before creating anything
+
+1. `gcloud` CLI is installed
+2. An active GCP account exists (`gcloud auth login`)
+3. Project exists and you have access
+4. Billing is enabled on the project
+5. Compute Engine API is enabled (auto-enables if not)
+6. Repo URL is resolvable (auto-detects from git remote)
+7. Asks for confirmation before creating resources (skip with `--yes`)
 
 ---
 
 ## Rollback
 
 ```bash
-# Quick — revert last deploy
-./scripts/deploy.sh --rollback
+./scripts/deploy.sh --rollback            # Revert last deploy
 
-# Specific commit — SSH in
+# Or for a specific commit:
 gcloud compute ssh urlpulse-vm --zone=us-central1-a
 cd PE-Hackathon-Template-2026
 git log --oneline -10
@@ -59,8 +63,10 @@ docker compose up -d --build
 
 | Problem | Fix |
 |---------|-----|
-| SSH refused | Check firewall: `gcloud compute firewall-rules list --filter=urlpulse` |
+| `No active gcloud account` | `gcloud auth login` |
+| `Billing is not enabled` | Enable at console.cloud.google.com/billing |
+| SSH refused | `gcloud compute firewall-rules list --filter=urlpulse` |
 | Health check fails | `docker compose logs app-1` |
 | Container won't start | Check `.env` has all required vars |
 | Disk full | `docker system prune -a` |
-| Permission denied | `sudo usermod -aG docker $USER` then re-login |
+| Docker permission denied | Re-login or `newgrp docker` |
