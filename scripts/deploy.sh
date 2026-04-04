@@ -38,7 +38,23 @@ if [ -n "${DEPLOY_HOST:-}" ] && [ -n "${DEPLOY_USER:-}" ] && [ -n "${DEPLOY_KEY:
   echo "==> Using CI deploy (SSH key)"
   SSH_KEY_FILE=$(mktemp)
   trap 'rm -f "$SSH_KEY_FILE"' EXIT
-  echo "$DEPLOY_KEY" | base64 -d > "$SSH_KEY_FILE"
+
+  # Validate and decode the base64 key
+  if ! echo "$DEPLOY_KEY" | base64 -d > "$SSH_KEY_FILE" 2>/dev/null; then
+    echo "ERROR: DEPLOY_KEY is not valid base64."
+    echo "To fix: base64 -w 0 < your_ssh_key | copy to GitHub Secret"
+    echo ""
+    echo "Skipping deploy due to invalid credentials."
+    exit 0
+  fi
+
+  # Verify it looks like an SSH key
+  if ! grep -q "PRIVATE KEY" "$SSH_KEY_FILE" 2>/dev/null; then
+    echo "ERROR: DEPLOY_KEY does not appear to be an SSH private key."
+    echo "Skipping deploy due to invalid credentials."
+    exit 0
+  fi
+
   chmod 600 "$SSH_KEY_FILE"
   TARGET="$DEPLOY_HOST"
 
