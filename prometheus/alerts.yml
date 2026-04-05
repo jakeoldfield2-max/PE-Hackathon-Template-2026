@@ -3,7 +3,7 @@ groups:
     rules:
       - alert: ServiceDown
         expr: up{job="urlpulse"} == 0
-        for: 15s
+        for: 10s
         labels:
           severity: critical
           service: urlpulse
@@ -16,7 +16,7 @@ groups:
 
       - alert: HighErrorRate
         expr: sum(rate(http_requests_total{status=~"5.."}[1m])) > 0.5
-        for: 1m
+        for: 30s
         labels:
           severity: warning
           service: urlpulse
@@ -31,9 +31,9 @@ groups:
         expr: |
           histogram_quantile(
             0.95,
-            sum(rate(http_request_duration_seconds_bucket[2m])) by (le)
+            sum(rate(http_request_duration_seconds_bucket[1m])) by (le)
           ) > 2
-        for: 2m
+        for: 1m
         labels:
           severity: warning
           service: urlpulse
@@ -46,7 +46,7 @@ groups:
 
       - alert: HighMemoryUsage
         expr: process_resident_memory_bytes > 500000000
-        for: 2m
+        for: 1m
         labels:
           severity: warning
           service: urlpulse

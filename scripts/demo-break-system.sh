@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# demo_break_system.sh
+# demo-break-system.sh
 #
 # Purpose:
 #   Run a stage-friendly "break the system" demo with preflight checks,
 #   controlled failures, and explicit recovery verification.
 #
 # Usage:
-#   ./scripts/demo_break_system.sh
-#   ./scripts/demo_break_system.sh --remote
-#   ./scripts/demo_break_system.sh --remote --skip-seed
+#   ./scripts/demo-break-system.sh
+#   ./scripts/demo-break-system.sh --remote
+#   ./scripts/demo-break-system.sh --remote --skip-seed
 
 set -euo pipefail
 
@@ -35,7 +35,7 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     *)
-      echo "Usage: ./scripts/demo_break_system.sh [--remote] [--skip-seed]"
+      echo "Usage: ./scripts/demo-break-system.sh [--remote] [--skip-seed]"
       exit 1
       ;;
   esac

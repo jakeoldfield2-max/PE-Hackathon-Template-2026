@@ -141,6 +141,7 @@ kill_one() {
   echo ""
   log "=== CHAOS: Kill One Instance ==="
   log "Proves: horizontal scaling — 2 of 3 instances keep serving"
+  log "Proves: Prometheus detects instance down, Discord alert fires"
   echo ""
 
   log "Killing app-1..."
@@ -160,11 +161,16 @@ kill_one() {
   log "Running instances:"
   run_docker "ps --format 'table {{.Name}}\t{{.Status}}'" | grep app
 
+  warn "Check Prometheus: ${BASE_URL}:9090/targets — app-1 should show DOWN"
+  warn "Check Discord — ServiceDown alert should fire within ~15s..."
+  sleep_with_progress 20 "Waiting for ServiceDown alert"
+
   log "Restarting app-1..."
   run_docker "start app-1"
-  sleep_with_progress 3 "Waiting for app-1 to come back"
+  sleep_with_progress 10 "Waiting for app-1 to come back"
 
   pass "app-1 restarted. All 3 instances serving."
+  warn "Check Discord — Resolved alert should appear within ~15s"
   run_docker "ps --format 'table {{.Name}}\t{{.Status}}'" | grep app
   echo ""
 }
@@ -173,7 +179,7 @@ kill_one() {
 kill_all() {
   echo ""
   log "=== CHAOS: Kill All Instances ==="
-  log "Proves: alerting works — Discord should fire ServiceDown alert (~60-90s)"
+  log "Proves: alerting works — Discord should fire ServiceDown alert (~15s)"
   echo ""
 
   log "Killing all app instances..."
@@ -187,13 +193,16 @@ kill_all() {
     fail "/health still returns 200 — something is wrong"
   fi
 
-  warn "Check Discord for ServiceDown alert (fires after ~60s)..."
-  sleep_with_progress 30 "Demonstrating downtime window"
+  warn "Check Discord for ServiceDown alert (fires after ~15s)..."
+  sleep_with_progress 25 "Demonstrating downtime window"
 
   log "Restarting all instances..."
   run_docker "start app-1 app-2 app-3"
 
   wait_for_recovery "app instances"
+  warn "Check Discord — Resolved alert should appear within ~15s"
+  sleep_with_progress 15 "Waiting for resolved notification"
+  pass "Full cycle complete: alert fired → recovered → resolved"
   echo ""
 }
 
@@ -205,11 +214,11 @@ error_flood() {
   log "Target: $BASE_URL"
   echo ""
 
-  log "Sending sustained 5xx errors for ~3 minutes to trigger alert..."
-  log "  (Alert rule requires error rate > 5% for 2 consecutive minutes)"
+  log "Sending sustained 5xx errors for ~60s to trigger alert..."
+  log "  (Alert rule requires error rate > 0.5/sec for 30 consecutive seconds)"
   local error_count=0
   local total=0
-  local end_time=$((SECONDS + 180))
+  local end_time=$((SECONDS + 60))
   local started_at=$SECONDS
   while [ $SECONDS -lt $end_time ]; do
     for i in $(seq 1 10); do
