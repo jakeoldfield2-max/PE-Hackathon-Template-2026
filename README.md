@@ -257,7 +257,13 @@ k6 run --env BASE_URL=http://$VM_IP tests/load/tsunami.js    # 500 VUs
 ./scripts/chaos.sh --remote kill-db       # Show /health vs /ready difference
 ./scripts/chaos.sh --remote kill-redis    # Verify graceful degradation
 ./scripts/chaos.sh --remote error-flood   # Trigger HighErrorRate alert → Discord
+./scripts/chaos.sh --remote high-latency   # Trigger HighLatency alert → Discord
+./scripts/chaos.sh --remote high-memory    # Trigger HighMemoryUsage alert → Discord
 ./scripts/chaos.sh --remote full-demo     # Run all chaos tests on VM
+
+# Live "break the system" demo (preflight + full outage + recovery)
+./scripts/demo_break_system.sh
+./scripts/demo_break_system.sh --remote
 ```
 
 See [docs/LOAD_AND_CHAOS.md](docs/LOAD_AND_CHAOS.md) for the full guide — tier breakdowns, what each test proves, recommended demo order, and how to interpret results.

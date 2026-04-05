@@ -2,11 +2,12 @@ import json
 import logging
 import os
 import sys
+import time
 import traceback
 from datetime import datetime, timezone
 
 from dotenv import load_dotenv
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 
 from app.database import db, init_db
 from app.logging_config import attach_request_id_handlers, configure_json_logging
@@ -16,6 +17,9 @@ from app.observability import (
     metrics_response,
 )
 from app.routes import register_routes
+
+
+CHAOS_MEMORY_HOGS = []
 
 
 def _log_startup_event(level, message, **extra):
@@ -131,6 +135,42 @@ def create_app():
     def chaos_error():
         """Returns 500 on purpose — used by chaos.sh error-flood to trigger HighErrorRate alert."""
         return jsonify(error="Intentional chaos error", status=500), 500
+
+    @app.route("/chaos/latency")
+    def chaos_latency():
+        """Sleeps on purpose — used to trigger HighLatency alert during demo runs."""
+        try:
+            seconds = float(request.args.get("seconds", "3"))
+        except ValueError:
+            seconds = 3.0
+
+        seconds = max(0.0, min(seconds, 10.0))
+        time.sleep(seconds)
+        return jsonify(status="ok", slept_seconds=seconds)
+
+    @app.route("/chaos/memory")
+    def chaos_memory():
+        """Allocates or releases memory on purpose — used to trigger HighMemoryUsage alert."""
+        action = request.args.get("action", "allocate").lower()
+
+        if action == "clear":
+            released = len(CHAOS_MEMORY_HOGS)
+            CHAOS_MEMORY_HOGS.clear()
+            return jsonify(status="cleared", chunks_released=released)
+
+        try:
+            megabytes = int(request.args.get("mb", "450"))
+        except ValueError:
+            megabytes = 450
+
+        megabytes = max(1, min(megabytes, 600))
+        chunk_size = 10 * 1024 * 1024
+        chunks = max(1, (megabytes + 9) // 10)
+
+        for _ in range(chunks):
+            CHAOS_MEMORY_HOGS.append(bytearray(chunk_size))
+
+        return jsonify(status="allocated", chunks=chunks, approx_megabytes=chunks * 10)
 
     # --- Health & Readiness ---
 

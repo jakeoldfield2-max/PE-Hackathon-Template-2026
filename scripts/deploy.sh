@@ -16,6 +16,21 @@ VM_NAME="urlpulse-vm"
 ZONE="us-central1-a"
 ROLLBACK="false"
 
+now() { date '+%H:%M:%S'; }
+log() { echo "[$(now)] [deploy] $1"; }
+ok() { echo "[$(now)] [ok] $1"; }
+warn() { echo "[$(now)] [wait] $1"; }
+err() { echo "[$(now)] [error] $1"; }
+
+sleep_with_progress() {
+  local seconds="$1"
+  local reason="${2:-waiting}"
+  for i in $(seq 1 "$seconds"); do
+    warn "$reason (${i}/${seconds}s)"
+    sleep 1
+  done
+}
+
 # ── Parse flags ──────────────────────────────────────────────────────────────
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -35,23 +50,22 @@ done
 # ── Determine SSH method ────────────────────────────────────────────────────
 if [ -n "${DEPLOY_HOST:-}" ] && [ -n "${DEPLOY_USER:-}" ] && [ -n "${DEPLOY_KEY:-}" ]; then
   # CI mode: use raw SSH with base64-encoded key
-  echo "==> Using CI deploy (SSH key)"
+  log "Using CI deploy (SSH key)"
   SSH_KEY_FILE=$(mktemp)
   trap 'rm -f "$SSH_KEY_FILE"' EXIT
 
   # Validate and decode the base64 key
   if ! echo "$DEPLOY_KEY" | base64 -d > "$SSH_KEY_FILE" 2>/dev/null; then
-    echo "ERROR: DEPLOY_KEY is not valid base64."
-    echo "To fix: base64 -w 0 < your_ssh_key | copy to GitHub Secret"
-    echo ""
-    echo "Skipping deploy due to invalid credentials."
+    err "DEPLOY_KEY is not valid base64."
+    log "To fix: base64 -w 0 < your_ssh_key | copy to GitHub Secret"
+    warn "Skipping deploy due to invalid credentials"
     exit 0
   fi
 
   # Verify it looks like an SSH key
   if ! grep -q "PRIVATE KEY" "$SSH_KEY_FILE" 2>/dev/null; then
-    echo "ERROR: DEPLOY_KEY does not appear to be an SSH private key."
-    echo "Skipping deploy due to invalid credentials."
+    err "DEPLOY_KEY does not appear to be an SSH private key"
+    warn "Skipping deploy due to invalid credentials"
     exit 0
   fi
 
@@ -65,13 +79,12 @@ if [ -n "${DEPLOY_HOST:-}" ] && [ -n "${DEPLOY_USER:-}" ] && [ -n "${DEPLOY_KEY:
 else
   # Local mode: use gcloud
   if ! command -v gcloud >/dev/null 2>&1; then
-    echo "ERROR: gcloud CLI not installed and no DEPLOY_HOST/DEPLOY_USER/DEPLOY_KEY env vars set."
-    echo ""
-    echo "Local:  install gcloud CLI → https://cloud.google.com/sdk/docs/install"
-    echo "CI:     set DEPLOY_HOST, DEPLOY_USER, DEPLOY_KEY as GitHub Secrets"
+    err "gcloud CLI not installed and no DEPLOY_HOST/DEPLOY_USER/DEPLOY_KEY env vars set"
+    log "Local: install gcloud CLI -> https://cloud.google.com/sdk/docs/install"
+    log "CI: set DEPLOY_HOST, DEPLOY_USER, DEPLOY_KEY as GitHub Secrets"
     exit 1
   fi
-  echo "==> Using gcloud SSH (VM: $VM_NAME, zone: $ZONE)"
+  log "Using gcloud SSH (VM: $VM_NAME, zone: $ZONE)"
   TARGET="$VM_NAME"
 
   run_remote() {
@@ -81,16 +94,16 @@ fi
 
 # ── Rollback mode ────────────────────────────────────────────────────────────
 if [ "$ROLLBACK" = "true" ]; then
-  echo "==> Rolling back on $TARGET..."
+  log "Rolling back on $TARGET"
   run_remote "cd $APP_DIR && git log --oneline -2 && git revert --no-edit HEAD && docker compose up -d --build"
-  echo "==> Rollback complete. Verifying health..."
-  sleep 5
+  log "Rollback complete. Verifying health..."
+  sleep_with_progress 5 "Waiting for services after rollback"
   run_remote "curl -sf http://localhost/health || echo 'WARNING: health check failed after rollback'"
   exit 0
 fi
 
 # ── Deploy ───────────────────────────────────────────────────────────────────
-echo "==> Deploying to $TARGET..."
+log "Deploying to $TARGET"
 
 run_remote "
   set -e
@@ -103,7 +116,10 @@ run_remote "
   docker compose up -d --build --force-recreate --remove-orphans
 
   echo '--- Waiting for health check ---'
-  sleep 5
+  for i in 1 2 3 4 5; do
+    echo '--- Waiting for health check ('"$i"'/5s) ---'
+    sleep 1
+  done
   if curl -sf http://localhost/health > /dev/null; then
     echo 'Health check passed'
   else
@@ -115,4 +131,4 @@ run_remote "
   docker compose ps
 "
 
-echo "==> Deploy to $TARGET succeeded."
+ok "Deploy to $TARGET succeeded"

@@ -107,16 +107,45 @@ The chaos script supports two modes:
 | `./scripts/chaos.sh [--remote] kill-db` | PostgreSQL | `/health` = 200 (alive), `/ready` = 503 (not ready) |
 | `./scripts/chaos.sh [--remote] kill-redis` | Redis cache | App still works, just slower — serves from DB directly |
 | `./scripts/chaos.sh [--remote] error-flood` | Sends 200 bad requests | Triggers HighErrorRate alert → Discord (~60s) |
+| `./scripts/chaos.sh [--remote] high-latency` | Sustained slow requests | Triggers HighLatency alert → Discord (~2m) |
+| `./scripts/chaos.sh [--remote] high-memory` | Allocate resident memory | Triggers HighMemoryUsage alert → Discord (~2m) |
 | `./scripts/chaos.sh [--remote] kill-all` | All 3 app instances | Total outage → ServiceDown alert on Discord (~60-90s) |
 
 ### Full Demo
 
-Runs all chaos tests sequentially with colored output (~3 minutes):
+Runs all chaos tests sequentially with colored output:
 
 ```bash
 ./scripts/chaos.sh full-demo            # Local
 ./scripts/chaos.sh --remote full-demo   # Remote VM
 ```
+
+### Stage Demo (Recommended)
+
+For a live presentation, use the dedicated orchestration script. It runs preflight checks, seeds data, then executes a full break-and-recover story including a complete outage.
+
+```bash
+./scripts/demo_break_system.sh
+./scripts/demo_break_system.sh --remote
+```
+
+What it runs in order:
+
+1. `kill-one` (prove no single-instance failure)
+2. `high-latency` (prove slow-request alerting)
+3. `kill-redis` (prove graceful degradation)
+4. `high-memory` (prove resident-memory alerting)
+5. `kill-db` (prove health vs readiness behavior)
+6. `error-flood` (trigger HighErrorRate alert)
+7. `kill-all` (force full outage + automatic recovery)
+
+Optional:
+
+```bash
+./scripts/demo_break_system.sh --remote --skip-seed
+```
+
+Use `--skip-seed` if your data is already prepared and you want a faster run.
 
 **Demo flow:** kill instance → kill Redis → kill DB → error flood.
 

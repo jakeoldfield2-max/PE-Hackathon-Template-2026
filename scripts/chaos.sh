@@ -14,6 +14,8 @@
 #   kill-one      Kill 1 app instance, verify 2 still serve
 #   kill-all      Kill all instances, wait for Discord alert
 #   error-flood   Send 200 bad requests to trigger HighErrorRate alert
+#   high-latency  Sustain slow requests to trigger HighLatency alert
+#   high-memory   Allocate memory to trigger HighMemoryUsage alert
 #   kill-db       Kill PostgreSQL, show /health vs /ready difference
 #   kill-redis    Kill Redis, verify graceful degradation
 #   full-demo     Run all chaos tests sequentially
@@ -50,7 +52,6 @@ if [ "$REMOTE" = "true" ]; then
     exit 1
   fi
   BASE_URL="http://$VM_IP"
-  echo -e "${CYAN}[chaos]${NC} Remote mode: targeting $VM_NAME ($VM_IP)"
 else
   BASE_URL="${BASE_URL:-http://localhost}"
 fi
@@ -64,21 +65,55 @@ run_docker() {
   fi
 }
 
-log()  { echo -e "${CYAN}[chaos]${NC} $1"; }
-pass() { echo -e "${GREEN}[PASS]${NC} $1"; }
-fail() { echo -e "${RED}[FAIL]${NC} $1"; }
-warn() { echo -e "${YELLOW}[WAIT]${NC} $1"; }
+now() { date '+%H:%M:%S'; }
+log()  { echo -e "${CYAN}[$(now)] [chaos]${NC} $1"; }
+pass() { echo -e "${GREEN}[$(now)] [PASS]${NC} $1"; }
+fail() { echo -e "${RED}[$(now)] [FAIL]${NC} $1"; }
+warn() { echo -e "${YELLOW}[$(now)] [WAIT]${NC} $1"; }
+
+if [ "$REMOTE" = "true" ]; then
+  log "Remote mode: targeting $VM_NAME ($VM_IP)"
+fi
+
+sleep_with_progress() {
+  local seconds="$1"
+  local reason="${2:-waiting}"
+  for i in $(seq 1 "$seconds"); do
+    warn "$reason (${i}/${seconds}s)"
+    sleep 1
+  done
+}
 
 check_health() {
   local status
-  status=$(curl -sf -o /dev/null -w "%{http_code}" "$BASE_URL/health" 2>/dev/null || echo "000")
+  status=$(curl -sS -o /dev/null -w "%{http_code}" "$BASE_URL/health" 2>/dev/null || echo "000")
   echo "$status"
 }
 
 check_ready() {
   local status
-  status=$(curl -sf -o /dev/null -w "%{http_code}" "$BASE_URL/ready" 2>/dev/null || echo "000")
+  status=$(curl -sS -o /dev/null -w "%{http_code}" "$BASE_URL/ready" 2>/dev/null || echo "000")
   echo "$status"
+}
+
+wait_for_ready() {
+  local label="$1"
+  local max_wait="${2:-60}"
+  log "Waiting for $label readiness (max ${max_wait}s)..."
+  for i in $(seq 1 "$max_wait"); do
+    local ready_code
+    ready_code=$(check_ready)
+    if [ "$ready_code" = "200" ]; then
+      pass "$label ready after ${i}s"
+      return 0
+    fi
+    if [ "$i" -eq 1 ] || [ $((i % 5)) -eq 0 ]; then
+      warn "$label not ready yet (status: $ready_code, waited ${i}/${max_wait}s)"
+    fi
+    sleep 1
+  done
+  fail "$label not ready after ${max_wait}s"
+  return 1
 }
 
 wait_for_recovery() {
@@ -86,9 +121,14 @@ wait_for_recovery() {
   local max_wait="${2:-60}"
   log "Waiting for $label to recover (max ${max_wait}s)..."
   for i in $(seq 1 "$max_wait"); do
-    if [ "$(check_health)" = "200" ]; then
+    local health_code
+    health_code=$(check_health)
+    if [ "$health_code" = "200" ]; then
       pass "$label recovered after ${i}s"
       return 0
+    fi
+    if [ "$i" -eq 1 ] || [ $((i % 5)) -eq 0 ]; then
+      warn "$label still recovering (status: $health_code, waited ${i}/${max_wait}s)"
     fi
     sleep 1
   done
@@ -106,7 +146,7 @@ kill_one() {
   log "Killing app-1..."
   run_docker "stop app-1"
 
-  sleep 2
+  sleep_with_progress 2 "Allowing load balancer to reroute"
 
   local status
   status=$(check_health)
@@ -122,7 +162,7 @@ kill_one() {
 
   log "Restarting app-1..."
   run_docker "start app-1"
-  sleep 3
+  sleep_with_progress 3 "Waiting for app-1 to come back"
 
   pass "app-1 restarted. All 3 instances serving."
   run_docker "ps --format 'table {{.Name}}\t{{.Status}}'" | grep app
@@ -148,8 +188,7 @@ kill_all() {
   fi
 
   warn "Check Discord for ServiceDown alert (fires after ~60s)..."
-  warn "Waiting 30s to demonstrate downtime..."
-  sleep 30
+  sleep_with_progress 30 "Demonstrating downtime window"
 
   log "Restarting all instances..."
   run_docker "start app-1 app-2 app-3"
@@ -171,6 +210,7 @@ error_flood() {
   local error_count=0
   local total=0
   local end_time=$((SECONDS + 180))
+  local started_at=$SECONDS
   while [ $SECONDS -lt $end_time ]; do
     for i in $(seq 1 10); do
       curl -sf -o /dev/null "$BASE_URL/chaos/error" 2>/dev/null || true
@@ -180,6 +220,14 @@ error_flood() {
     # Mix in a few good requests so the rate calculation has a denominator
     curl -sf -o /dev/null "$BASE_URL/health" 2>/dev/null || true
     total=$((total + 1))
+    local elapsed=$((SECONDS - started_at))
+    if [ "$elapsed" -eq 1 ] || [ $((elapsed % 15)) -eq 0 ]; then
+      local remaining=$((180 - elapsed))
+      if [ "$remaining" -lt 0 ]; then
+        remaining=0
+      fi
+      warn "Error flood running: ${elapsed}s elapsed, ${remaining}s remaining"
+    fi
     sleep 1
   done
 
@@ -187,6 +235,57 @@ error_flood() {
   warn "Check Discord for HighErrorRate alert (should fire soon)..."
   log "Check Prometheus: ${BASE_URL}:9090/alerts"
   log "Alert will auto-resolve ~1 minute after errors stop"
+  echo ""
+}
+
+# ── Mode: high-latency ──────────────────────────────────────────────────────
+high_latency() {
+  echo ""
+  log "=== CHAOS: High Latency ==="
+  log "Proves: HighLatency alert triggers when p95 latency stays above 2s"
+  log "Target: $BASE_URL"
+  echo ""
+
+  log "Sending sustained slow requests for ~3 minutes..."
+  local request_count=0
+  local end_time=$((SECONDS + 180))
+  local started_at=$SECONDS
+  while [ $SECONDS -lt $end_time ]; do
+    curl -sf -o /dev/null "$BASE_URL/chaos/latency?seconds=3" 2>/dev/null || true
+    request_count=$((request_count + 1))
+    local elapsed=$((SECONDS - started_at))
+    if [ "$elapsed" -eq 1 ] || [ $((elapsed % 15)) -eq 0 ]; then
+      local remaining=$((180 - elapsed))
+      if [ "$remaining" -lt 0 ]; then
+        remaining=0
+      fi
+      warn "High latency load running: ${elapsed}s elapsed, ${remaining}s remaining"
+    fi
+  done
+
+  pass "Sent $request_count slow requests"
+  warn "Stop slow traffic — HighLatency should resolve after the 2m alert window"
+  sleep_with_progress 130 "Cooling down HighLatency"
+  echo ""
+}
+
+# ── Mode: high-memory ───────────────────────────────────────────────────────
+high_memory() {
+  echo ""
+  log "=== CHAOS: High Memory Usage ==="
+  log "Proves: HighMemoryUsage alert fires when resident memory exceeds threshold"
+  log "Target: $BASE_URL"
+  echo ""
+
+  local allocate_mb="${1:-450}"
+  log "Allocating ${allocate_mb}MB in the app process..."
+  curl -sf "$BASE_URL/chaos/memory?mb=${allocate_mb}" >/dev/null 2>&1 || true
+
+  sleep_with_progress 150 "Holding memory pressure"
+
+  log "Releasing allocated memory..."
+  curl -sf "$BASE_URL/chaos/memory?action=clear" >/dev/null 2>&1 || true
+  sleep_with_progress 130 "Cooling down HighMemoryUsage"
   echo ""
 }
 
@@ -207,7 +306,7 @@ kill_db() {
   log "Killing PostgreSQL..."
   run_docker "stop postgres"
 
-  sleep 3
+  sleep_with_progress 3 "Allowing DB disconnect to propagate"
 
   local health_after ready_after
   health_after=$(check_health)
@@ -229,15 +328,10 @@ kill_db() {
   log "Restarting PostgreSQL..."
   run_docker "start postgres"
 
-  # Wait for postgres to be healthy
-  sleep 10
-
-  local ready_recovered
-  ready_recovered=$(check_ready)
-  if [ "$ready_recovered" = "200" ]; then
-    pass "/ready: $ready_recovered — DB reconnected"
+  if wait_for_ready "postgres" 90; then
+    pass "/ready: 200 — DB reconnected"
   else
-    warn "/ready: $ready_recovered — DB may still be starting up"
+    warn "/ready is still not 200 — DB may still be starting up"
   fi
   echo ""
 }
@@ -258,7 +352,7 @@ kill_redis() {
   log "Killing Redis..."
   run_docker "stop redis"
 
-  sleep 2
+  sleep_with_progress 2 "Allowing cache outage to propagate"
 
   local status
   status=$(check_health)
@@ -279,7 +373,7 @@ kill_redis() {
 
   log "Restarting Redis..."
   run_docker "start redis"
-  sleep 3
+  sleep_with_progress 3 "Waiting for Redis to accept connections"
 
   pass "Redis back online. Cache warming up."
   echo ""
@@ -294,11 +388,15 @@ full_demo() {
   echo ""
 
   kill_one
-  sleep 2
+  sleep_with_progress 2 "Transitioning to next chaos phase"
+  high_latency
+  sleep_with_progress 2 "Transitioning to next chaos phase"
   kill_redis
-  sleep 2
+  sleep_with_progress 2 "Transitioning to next chaos phase"
+  high_memory 450
+  sleep_with_progress 2 "Transitioning to next chaos phase"
   kill_db
-  sleep 2
+  sleep_with_progress 2 "Transitioning to next chaos phase"
   error_flood
 
   echo ""
@@ -315,6 +413,8 @@ case "${1:-help}" in
   kill-one)     kill_one ;;
   kill-all)     kill_all ;;
   error-flood)  error_flood ;;
+  high-latency) high_latency ;;
+  high-memory)  high_memory "${2:-450}" ;;
   kill-db)      kill_db ;;
   kill-redis)   kill_redis ;;
   full-demo)    full_demo ;;
@@ -325,6 +425,8 @@ case "${1:-help}" in
     echo "  kill-one      Kill 1 app instance, verify 2 still serve"
     echo "  kill-all      Kill all instances, wait for Discord alert"
     echo "  error-flood   Send 200 bad requests, trigger HighErrorRate alert"
+    echo "  high-latency  Sustain slow requests, trigger HighLatency alert"
+    echo "  high-memory   Allocate memory, trigger HighMemoryUsage alert"
     echo "  kill-db       Kill PostgreSQL, show /health vs /ready"
     echo "  kill-redis    Kill Redis, verify graceful degradation"
     echo "  full-demo     Run all chaos tests sequentially"

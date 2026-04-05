@@ -1,4 +1,5 @@
 import time
+import sys
 from typing import Dict
 
 from flask import Response, g, request
@@ -44,7 +45,12 @@ def _process_resident_memory_bytes() -> int:
         import resource
 
         rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
-        return rss if rss >= 0 else 0
+        if rss < 0:
+            return 0
+        # Linux reports ru_maxrss in KiB; macOS reports bytes.
+        if sys.platform.startswith("linux"):
+            return rss * 1024
+        return rss
     except Exception:
         return 0
 

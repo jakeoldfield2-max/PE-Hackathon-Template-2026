@@ -25,6 +25,21 @@ IP_NAME="urlpulse-ip"
 TARGET_PROJECT=""
 ASSUME_YES="false"
 
+now() { date '+%H:%M:%S'; }
+log() { echo "[$(now)] [provision] $1"; }
+ok() { echo "[$(now)] [ok] $1"; }
+warn() { echo "[$(now)] [wait] $1"; }
+err() { echo "[$(now)] [error] $1"; }
+
+sleep_with_progress() {
+  local seconds="$1"
+  local reason="${2:-waiting}"
+  for i in $(seq 1 "$seconds"); do
+    warn "$reason (${i}/${seconds}s)"
+    sleep 1
+  done
+}
+
 # ── Parse flags ──────────────────────────────────────────────────────────────
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -42,11 +57,11 @@ while [[ $# -gt 0 ]]; do
 done
 
 # ── Preflight: gcloud CLI ───────────────────────────────────────────────────
-echo "==> Preflight checks"
+log "Preflight checks"
 
 if ! command -v gcloud >/dev/null 2>&1; then
-  echo "ERROR: gcloud CLI is not installed."
-  echo "Install: https://cloud.google.com/sdk/docs/install"
+  err "gcloud CLI is not installed"
+  log "Install: https://cloud.google.com/sdk/docs/install"
   exit 1
 fi
 
@@ -54,18 +69,18 @@ fi
 ACTIVE_ACCOUNT=$(gcloud auth list --filter="status:ACTIVE" --format="value(account)" 2>/dev/null || true)
 
 if [ -z "$ACTIVE_ACCOUNT" ]; then
-  echo "ERROR: No active gcloud account."
-  echo "Run:  gcloud auth login"
+  err "No active gcloud account"
+  log "Run: gcloud auth login"
   exit 1
 fi
-echo "  Account: $ACTIVE_ACCOUNT"
+ok "Account: $ACTIVE_ACCOUNT"
 
 # ── Preflight: project selection ─────────────────────────────────────────────
 if [ -n "$TARGET_PROJECT" ]; then
   # Verify the project exists and user has access
   if ! gcloud projects describe "$TARGET_PROJECT" &>/dev/null; then
-    echo "ERROR: Cannot access project '$TARGET_PROJECT'."
-    echo "Check the project ID and your permissions."
+    err "Cannot access project '$TARGET_PROJECT'"
+    log "Check the project ID and your permissions"
     exit 1
   fi
   gcloud config set project "$TARGET_PROJECT" >/dev/null 2>&1
@@ -73,36 +88,33 @@ if [ -n "$TARGET_PROJECT" ]; then
 else
   ACTIVE_PROJECT=$(gcloud config get-value project 2>/dev/null || true)
   if [ -z "$ACTIVE_PROJECT" ] || [ "$ACTIVE_PROJECT" = "(unset)" ]; then
-    echo ""
-    echo "ERROR: No GCP project selected."
-    echo "Either pass --project <id> or run:  gcloud config set project <project-id>"
-    echo ""
-    echo "Your available projects:"
+    err "No GCP project selected"
+    log "Either pass --project <id> or run: gcloud config set project <project-id>"
+    log "Your available projects:"
     gcloud projects list --format="table(projectId, name)" 2>/dev/null || true
     exit 1
   fi
 fi
-echo "  Project: $ACTIVE_PROJECT"
+ok "Project: $ACTIVE_PROJECT"
 
 # ── Preflight: billing enabled ───────────────────────────────────────────────
 BILLING_ENABLED=$(gcloud billing projects describe "$ACTIVE_PROJECT" --format="value(billingEnabled)" 2>/dev/null || echo "unknown")
 if [ "$BILLING_ENABLED" = "False" ]; then
-  echo ""
-  echo "ERROR: Billing is not enabled for project '$ACTIVE_PROJECT'."
-  echo "Enable billing: https://console.cloud.google.com/billing/linkedaccount?project=$ACTIVE_PROJECT"
+  err "Billing is not enabled for project '$ACTIVE_PROJECT'"
+  log "Enable billing: https://console.cloud.google.com/billing/linkedaccount?project=$ACTIVE_PROJECT"
   exit 1
 elif [ "$BILLING_ENABLED" = "unknown" ]; then
-  echo "  Billing: could not verify (may lack billing viewer role — continuing)"
+  warn "Billing could not be verified (may lack billing viewer role — continuing)"
 else
-  echo "  Billing: enabled"
+  ok "Billing: enabled"
 fi
 
 # ── Preflight: Compute Engine API ────────────────────────────────────────────
 if ! gcloud services list --enabled --filter="name:compute.googleapis.com" --format="value(name)" 2>/dev/null | grep -q compute; then
-  echo "  Compute API not enabled — enabling now..."
+  warn "Compute API not enabled, enabling now"
   gcloud services enable compute.googleapis.com
 fi
-echo "  Compute API: enabled"
+ok "Compute API: enabled"
 
 # ── Preflight: resolve repo URL ──────────────────────────────────────────────
 if [ -z "$REPO_URL" ]; then
@@ -110,22 +122,18 @@ if [ -z "$REPO_URL" ]; then
 fi
 
 if [ -z "$REPO_URL" ]; then
-  echo ""
-  echo "ERROR: No repo URL found."
-  echo ""
-  echo "Pass it via --repo flag:"
-  echo "  ./scripts/provision.sh --repo https://github.com/your-org/PE-Hackathon-Template-2026.git"
-  echo ""
-  echo "Or run this script from inside the cloned repo (auto-detects from git remote)."
+  err "No repo URL found"
+  log "Pass it via --repo flag: ./scripts/provision.sh --repo https://github.com/your-org/PE-Hackathon-Template-2026.git"
+  log "Or run this script from inside the cloned repo (auto-detects from git remote)"
   exit 1
 fi
 
 # Convert SSH URL to HTTPS (VM won't have GitHub SSH keys)
 if [[ "$REPO_URL" == git@github.com:* ]]; then
   REPO_URL="https://github.com/${REPO_URL#git@github.com:}"
-  echo "  Repo: $REPO_URL (converted from SSH to HTTPS)"
+  ok "Repo: $REPO_URL (converted from SSH to HTTPS)"
 else
-  echo "  Repo: $REPO_URL"
+  ok "Repo: $REPO_URL"
 fi
 
 echo ""
@@ -203,11 +211,11 @@ for i in $(seq 1 12); do
     break
   fi
   if [ "$i" -eq 12 ]; then
-    echo "ERROR: VM SSH not ready after 60s. Check the VM in GCP Console."
+    err "VM SSH not ready after 60s. Check the VM in GCP Console"
     exit 1
   fi
-  echo "  Waiting for SSH... (attempt $i/12)"
-  sleep 5
+  warn "Waiting for SSH... (attempt $i/12)"
+  sleep_with_progress 5 "SSH probe backoff"
 done
 
 # ── 5. Install Docker on VM ─────────────────────────────────────────────────

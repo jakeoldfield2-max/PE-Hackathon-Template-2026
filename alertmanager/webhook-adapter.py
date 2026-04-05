@@ -115,6 +115,28 @@ def send_to_discord(content):
         return False
 
 
+def parse_alert_timestamp(value, fallback=None):
+    """Parse an Alertmanager timestamp or return a fallback datetime."""
+    if isinstance(value, datetime):
+        return value
+    if not value:
+        return fallback or datetime.now(timezone.utc)
+    try:
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except Exception:
+        return fallback or datetime.now(timezone.utc)
+
+
+def format_duration(start_time, end_time=None):
+    """Format a duration as Xm or Xh Ym for alert messages."""
+    end_time = end_time or datetime.now(timezone.utc)
+    duration = end_time - start_time
+    duration_mins = max(0, int(duration.total_seconds() // 60))
+    if duration_mins < 60:
+        return f"{duration_mins}m"
+    return f"{duration_mins // 60}h {duration_mins % 60}m"
+
+
 def log_alert_to_db(alert, group_status):
     """Log an alert to the database."""
     conn = get_db_connection()
@@ -128,7 +150,7 @@ def log_alert_to_db(alert, group_status):
         status = alert.get("status", group_status).lower()
 
         now = datetime.now(timezone.utc)
-        starts_at = alert.get("startsAt", now.isoformat())
+        starts_at = parse_alert_timestamp(alert.get("startsAt"), now)
 
         with conn.cursor() as cur:
             if status == "firing":
@@ -139,10 +161,37 @@ def log_alert_to_db(alert, group_status):
                                            last_notified_at, last_notified_notes, last_notified_description)
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT (fingerprint) DO UPDATE SET
+                        -- Treat a later startsAt as a new incident cycle even for the same fingerprint.
+                        first_fired_at = CASE
+                            WHEN EXCLUDED.first_fired_at > alert_logs.first_fired_at
+                            THEN EXCLUDED.first_fired_at
+                            ELSE alert_logs.first_fired_at
+                        END,
                         status = EXCLUDED.status,
+                        summary = EXCLUDED.summary,
                         description = EXCLUDED.description,
+                        notes = CASE
+                            WHEN EXCLUDED.first_fired_at > alert_logs.first_fired_at
+                            THEN NULL
+                            ELSE alert_logs.notes
+                        END,
                         last_updated_at = EXCLUDED.last_updated_at,
-                        resolved_at = NULL
+                        resolved_at = NULL,
+                        last_notified_at = CASE
+                            WHEN EXCLUDED.first_fired_at > alert_logs.first_fired_at
+                            THEN EXCLUDED.last_notified_at
+                            ELSE alert_logs.last_notified_at
+                        END,
+                        last_notified_notes = CASE
+                            WHEN EXCLUDED.first_fired_at > alert_logs.first_fired_at
+                            THEN EXCLUDED.last_notified_notes
+                            ELSE alert_logs.last_notified_notes
+                        END,
+                        last_notified_description = CASE
+                            WHEN EXCLUDED.first_fired_at > alert_logs.first_fired_at
+                            THEN EXCLUDED.last_notified_description
+                            ELSE alert_logs.last_notified_description
+                        END
                 """, (
                     fingerprint,
                     labels.get("alertname", "Unknown"),
@@ -282,15 +331,8 @@ def check_and_send_situation_updates():
                 changes.append(f"**Updated:** {current_desc}")
 
             # Calculate duration
-            first_fired = alert.get('first_fired_at')
-            if first_fired:
-                if isinstance(first_fired, str):
-                    first_fired = datetime.fromisoformat(first_fired.replace('Z', '+00:00'))
-                duration = now - first_fired
-                duration_mins = int(duration.total_seconds() // 60)
-                duration_str = f"{duration_mins}m" if duration_mins < 60 else f"{duration_mins // 60}h {duration_mins % 60}m"
-            else:
-                duration_str = "unknown"
+            first_fired = parse_alert_timestamp(alert.get('first_fired_at'), now)
+            duration_str = format_duration(first_fired, now)
 
             # Build update message
             short_id = fingerprint[:8]
@@ -430,6 +472,9 @@ class WebhookHandler(BaseHTTPRequestHandler):
 
                 severity_icon = "🚨" if severity == "critical" else "⚠️"
 
+                starts_at = parse_alert_timestamp(alert.get("startsAt"))
+                duration_str = format_duration(starts_at)
+
                 msg = f"═══════════════════════════════\n"
                 msg += f"**{status_display}** {severity_icon} **{name}**\n"
                 msg += f"ID: `{fingerprint}`\n"
@@ -440,6 +485,10 @@ class WebhookHandler(BaseHTTPRequestHandler):
                     msg += f"**Instance:** `{instance}`\n"
                 if impact:
                     msg += f"**Impact:** {impact}\n"
+                if status == "FIRING":
+                    msg += f"**Duration:** {duration_str}\n"
+                elif status == "RESOLVED":
+                    msg += f"**Duration:** {duration_str}\n"
                 if action and status == "FIRING":
                     # Format numbered steps as a clean list
                     # Split on numbered patterns (1., 2., 3., etc.)

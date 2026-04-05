@@ -16,6 +16,12 @@ GRAFANA_USER=""
 GRAFANA_PASS=""
 DISCORD_WEBHOOK=""
 
+now() { date '+%H:%M:%S'; }
+log() { echo "[$(now)] [setup-vm] $1"; }
+ok() { echo "[$(now)] [ok] $1"; }
+warn() { echo "[$(now)] [wait] $1"; }
+err() { echo "[$(now)] [error] $1"; }
+
 # ── Parse flags ──────────────────────────────────────────────────────────────
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -38,7 +44,7 @@ done
 if [ -z "$DB_PASS" ]; then
   read -r -p "Database password: " DB_PASS
   if [ -z "$DB_PASS" ]; then
-    echo "ERROR: Database password is required."
+    err "Database password is required"
     exit 1
   fi
 fi
@@ -51,7 +57,7 @@ fi
 if [ -z "$GRAFANA_PASS" ]; then
   read -r -p "Grafana admin password: " GRAFANA_PASS
   if [ -z "$GRAFANA_PASS" ]; then
-    echo "ERROR: Grafana password is required."
+    err "Grafana password is required"
     exit 1
   fi
 fi
@@ -63,8 +69,7 @@ if [ -z "$DISCORD_WEBHOOK" ]; then
   fi
 fi
 
-echo ""
-echo "==> Configuring VM: $VM_NAME (zone: $ZONE)"
+log "Configuring VM: $VM_NAME (zone: $ZONE)"
 
 # ── Generate .env content ───────────────────────────────────────────────────
 ENV_CONTENT="FLASK_DEBUG=false
@@ -92,7 +97,7 @@ DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK}
 "
 
 # ── SSH into VM and set up ───────────────────────────────────────────────────
-echo "--- Creating .env on VM ---"
+log "Creating .env on VM"
 gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="
   cd $APP_DIR
 
@@ -107,7 +112,10 @@ ENVEOF
   docker compose up -d --build
 
   echo '--- Waiting for services to be ready ---'
-  sleep 10
+  for i in 1 2 3 4 5 6 7 8 9 10; do
+    echo '--- Waiting for services ('"$i"'/10s) ---'
+    sleep 1
+  done
 
   echo '--- Health check ---'
   if curl -sf http://localhost/health; then
