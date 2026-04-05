@@ -220,28 +220,22 @@ See [docs/DEPLOY.md](docs/DEPLOY.md) for first-time setup and troubleshooting.
 
 ## Troubleshooting
 
-### 1. Port Binding Errors (`Address already in use`)
-Since this template spins up a full observability stack, it requires several open ports.
-* **Symptoms:** Error message: `Bind for 0.0.0.0:5432 failed: port is already allocated`.
-* **Solution:** Identify and stop any local services running on these ports:
-    * **80:** Nginx (Check for Apache/Local Nginx)
-    * **5432:** PostgreSQL
-    * **6379:** Redis
-    * **3000:** Grafana
-* *Temporary fix:* You can modify the left-hand side of the `ports` mapping in `docker-compose.yml` (e.g., `"5433:5432"`) to bypass the conflict.
+Common issues and quick fixes. For the full guide with diagnostic commands and step-by-step fixes, see **[docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)**.
 
-### 2. "uv: command not found"
-The local (non-Docker) setup requires `uv`, a high-performance Python package manager.
-* **Symptoms:** `bash: uv: command not found` when trying to run `uv sync` or `uv run`.
-* **Solution:** Install `uv` via the official installer:
-    ```bash
-    curl -LsSf [https://astral.sh/uv/install.sh](https://astral.sh/uv/install.sh) | sh
-    ```
-    Alternatively, if you prefer not to use `uv`, you can manually create a virtual environment and install dependencies listed in `pyproject.toml`.
-
-### 3. Database Connection Refused (Non-Docker Setup)
-* **Symptoms:** `peewee.OperationalError: (psycopg2.OperationalError) connection to server at "localhost" (::1), port 5432 failed`.
-* **Solution:** If running the app locally (outside Docker), ensure your `.env` has `DATABASE_HOST=localhost`. If using the Docker database with a local app, ensure you have exposed port `5432` in your Compose file.
+| # | Issue | Quick Fix |
+|---|-------|-----------|
+| 1 | **Port already in use** | `lsof -i :<port>` to find the conflict, stop it or remap in `docker-compose.yml` |
+| 2 | **`uv: command not found`** | `curl -LsSf https://astral.sh/uv/install.sh \| sh` |
+| 3 | **DB connection refused (local)** | Set `DATABASE_HOST=localhost` in `.env`, ensure PostgreSQL is running |
+| 4 | **Containers won't start** | Check `.env` has all required vars, run `docker compose logs <service>` |
+| 5 | **No logs in GCP Cloud Logging** | Filter by `resource.type="gce_instance"`, not `"global"`. See [full guide](docs/TROUBLESHOOTING.md#6-no-logs-in-gcp-cloud-logging) |
+| 6 | **Prometheus targets DOWN** | `docker compose ps` — restart failed containers |
+| 7 | **Grafana shows "No data"** | Check Prometheus data source URL is `http://prometheus:9090` (not localhost) |
+| 8 | **Discord alerts not firing** | Verify `DISCORD_WEBHOOK_URL` in `.env`, check `docker compose logs discord-webhook` |
+| 9 | **CI deploy skips silently** | Add `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_KEY` GitHub Secrets. See [DEPLOY.md](docs/DEPLOY.md#github-secrets-for-ci-deploy) |
+| 10 | **SSH refused to VM** | Check VM is running: `gcloud compute instances describe urlpulse-vm --zone=us-central1-a` |
+| 11 | **High latency** | Check Redis is up (`X-Cache` header), run `docker stats` for resource usage |
+| 12 | **Docker permission denied on VM** | `sudo usermod -aG docker $USER && newgrp docker` |
 
 ## Environment Variables
 
@@ -323,6 +317,7 @@ See [docs/LOAD_AND_CHAOS.md](docs/LOAD_AND_CHAOS.md) for the full guide — tier
 | Doc | What it covers |
 |-----|---------------|
 | [docs/DEPLOY.md](docs/DEPLOY.md) | GCP VM setup, CI deploy, rollback procedures |
+| [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | Full troubleshooting guide — diagnostics, tools, step-by-step fixes |
 | [docs/DECISIONS.md](docs/DECISIONS.md) | Technical choices with rationale (GCP, Nginx, Redis, etc.) |
 | [docs/LOAD_AND_CHAOS.md](docs/LOAD_AND_CHAOS.md) | Load testing guide, chaos engineering demo, recommended demo order |
 | [docs/CAPACITY.md](docs/CAPACITY.md) | Load test results, bottleneck analysis, scaling roadmap |
