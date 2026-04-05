@@ -210,6 +210,17 @@ def update_alert_notes(fingerprint, notes):
         return False
 
 
+def _get_alertmanager_firing():
+    """Get currently firing alert fingerprints from Alertmanager."""
+    try:
+        req = urllib.request.Request("http://alertmanager:9093/api/v2/alerts")
+        resp = urllib.request.urlopen(req, timeout=5)
+        alerts = json.loads(resp.read())
+        return {a.get("fingerprint", "") for a in alerts if a.get("status", {}).get("state") == "active"}
+    except Exception:
+        return None  # Return None if we can't reach Alertmanager (don't auto-resolve)
+
+
 def check_and_send_situation_updates():
     """Check for firing alerts and send situation updates if there are changes."""
     conn = get_db_connection()
@@ -217,6 +228,28 @@ def check_and_send_situation_updates():
         return
 
     try:
+        # Cross-check with Alertmanager — auto-resolve stale DB records
+        am_firing = _get_alertmanager_firing()
+        if am_firing is not None:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute("SELECT fingerprint FROM alert_logs WHERE status = 'firing'")
+                db_firing = cur.fetchall()
+                for row in db_firing:
+                    fp = row['fingerprint']
+                    if fp not in am_firing:
+                        now = datetime.now(timezone.utc)
+                        cur.execute(
+                            "UPDATE alert_logs SET status='resolved', resolved_at=%s, last_updated_at=%s WHERE fingerprint=%s",
+                            (now, now, fp)
+                        )
+                        print(f"Auto-resolved stale alert {fp[:8]}... (not in Alertmanager)", flush=True)
+                        send_to_discord(
+                            f"═══════════════════════════════\n"
+                            f"**Resolved** ✅ Alert `{fp[:8]}`\n"
+                            f"Auto-resolved — no longer firing in Alertmanager.\n"
+                            f"═══════════════════════════════"
+                        )
+
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             # Get all firing alerts
             cur.execute("""

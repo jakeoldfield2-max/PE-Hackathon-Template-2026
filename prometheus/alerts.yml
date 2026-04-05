@@ -15,17 +15,14 @@ groups:
           action: "1. Check logs: docker compose logs {{ $labels.instance | reReplaceAll \":.*\" \"\" }} --tail 50  2. Restart: docker compose restart {{ $labels.instance | reReplaceAll \":.*\" \"\" }}"
 
       - alert: HighErrorRate
-        expr: |
-          sum(rate(http_requests_total{status=~"5.."}[2m]))
-          /
-          sum(rate(http_requests_total[2m])) > 0.05
-        for: 2m
+        expr: sum(rate(http_requests_total{status=~"5.."}[1m])) > 0.5
+        for: 1m
         labels:
           severity: warning
           service: urlpulse
         annotations:
           summary: "High 5xx error rate"
-          description: "5xx error rate is {{ $value | humanizePercentage }} (threshold: 5%)."
+          description: "Seeing {{ $value | humanize }} errors/sec (threshold: 0.5/sec)."
           impact: "Users experiencing failed requests. SLA at risk."
           runbook: "docs/runbooks/HIGH_ERROR_RATE.md"
           action: "1. Check logs for exceptions  2. Verify database: curl http://localhost/ready  3. Check recent deployments"

@@ -1,16 +1,11 @@
 import streamlit as st
 import json
-from app.ui.helpers import api, gen_code
+from app.ui.helpers import api
 
 def render_tab_shorten(BASE, user_map):
     st.markdown('<div class="section-label">— new short link</div>', unsafe_allow_html=True)
 
-    r1c1, r1c2 = st.columns([3, 1])
-    with r1c1:
-        dest = st.text_input("DESTINATION URL", placeholder="https://github.com/MLH/mlh-policies")
-    with r1c2:
-        custom_code = st.text_input("SHORT CODE", placeholder="auto-generated", max_chars=12,
-                                     help="Leave blank for a random 6-char code")
+    dest = st.text_input("DESTINATION URL", placeholder="https://github.com/MLH/mlh-policies")
 
     r2c1, r2c2, r2c3 = st.columns([2, 2, 1])
     with r2c1:
@@ -40,18 +35,17 @@ def render_tab_shorten(BASE, user_map):
         elif not owner_id:
             st.markdown('<div class="alert-err">select an owner user first</div>', unsafe_allow_html=True)
         else:
-            code = custom_code.strip() if custom_code.strip() else gen_code()
             payload = {
                 "original_url": dest,
-                "short_code": code,
                 "user_id": owner_id,
                 "title": title.strip() or None,
                 "is_active": True,
             }
             with st.spinner("creating…"):
-                sc, rv = api("POST", "/shorten", BASE, json=payload)
+                sc, rv = api("POST", "/urls", BASE, json=payload)
             if sc in (200, 201):
-                short_link = f"{BASE}/{code}"
+                short_code = rv.get("short_code", "")
+                short_link = rv.get("short_url") or (f"{BASE}/s/{short_code}" if short_code else BASE)
                 st.markdown(
                     f'<div class="result-box">'
                     f'<div class="result-label">short link created</div>'
@@ -66,9 +60,9 @@ def render_tab_shorten(BASE, user_map):
 
     st.markdown('<div class="section-label" style="margin-top:2rem;">— quick reference</div>', unsafe_allow_html=True)
     st.code(f"""# shorten
-curl -X POST {BASE}/shorten \\
+curl -X POST {BASE}/urls \\
   -H 'Content-Type: application/json' \\
-  -d '{{"original_url":"https://example.com","short_code":"abc123","user_id":1}}'
+  -d '{{"original_url":"https://example.com","title":"Example","user_id":1}}'
 
 # health / ready / stats
 curl {BASE}/health
