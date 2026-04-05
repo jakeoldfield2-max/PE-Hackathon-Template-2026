@@ -116,6 +116,15 @@ if ! gcloud services list --enabled --filter="name:compute.googleapis.com" --for
 fi
 ok "Compute API: enabled"
 
+# Enable Logging & Monitoring APIs (required for gcplogs Docker driver and metrics)
+for API_NAME in logging.googleapis.com monitoring.googleapis.com; do
+  if ! gcloud services list --enabled --filter="name:$API_NAME" --format="value(name)" 2>/dev/null | grep -q "${API_NAME%%.*}"; then
+    warn "$API_NAME not enabled, enabling now"
+    gcloud services enable "$API_NAME"
+  fi
+done
+ok "Logging & Monitoring APIs: enabled"
+
 # ── Preflight: resolve repo URL ──────────────────────────────────────────────
 if [ -z "$REPO_URL" ]; then
   REPO_URL=$(git remote get-url origin 2>/dev/null || true)
@@ -166,7 +175,8 @@ else
     --image-project="$IMAGE_PROJECT" \
     --boot-disk-size="$DISK_SIZE" \
     --zone="$ZONE" \
-    --tags=urlpulse
+    --tags=urlpulse \
+    --scopes=default,logging-write,monitoring-write
   echo "VM created."
 fi
 

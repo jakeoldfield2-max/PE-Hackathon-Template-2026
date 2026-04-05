@@ -13,12 +13,10 @@ services:
     env_file: .env
     environment:
       - INSTANCE_ID=app-1
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-      start_period: 15s
+    logging:
+      driver: gcplogs
+      options:
+        gcp-log-cmd: "true"
     depends_on:
       postgres:
         condition: service_healthy
@@ -32,12 +30,10 @@ services:
     env_file: .env
     environment:
       - INSTANCE_ID=app-2
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-      start_period: 15s
+    logging:
+      driver: gcplogs
+      options:
+        gcp-log-cmd: "true"
     depends_on:
       postgres:
         condition: service_healthy
@@ -51,12 +47,10 @@ services:
     env_file: .env
     environment:
       - INSTANCE_ID=app-3
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-      start_period: 15s
+    logging:
+      driver: gcplogs
+      options:
+        gcp-log-cmd: "true"
     depends_on:
       postgres:
         condition: service_healthy
