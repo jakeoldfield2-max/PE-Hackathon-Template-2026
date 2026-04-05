@@ -67,9 +67,17 @@ Observability:
 | `POST` | `/users` | Create a user |
 | `GET` | `/users` | List all users |
 | `GET` | `/users/<id>` | Get user by ID |
-| `POST` | `/shorten` | Create a shortened URL |
-| `POST` | `/update` | Update a URL |
-| `POST` | `/delete` | Delete a URL |
+| `POST` | `/users/bulk` | Bulk-create users from CSV or JSON payload |
+| `PUT` | `/users/<id>` | Update a user |
+| `DELETE` | `/users/<id>` | Delete a user |
+| `GET` | `/urls` | List URLs, optionally filtered by user or active status |
+| `POST` | `/urls` | Create a shortened URL |
+| `GET` | `/urls/<id>` | Get URL by ID |
+| `PUT` | `/urls/<id>` | Update a URL |
+| `DELETE` | `/urls/<id>` | Delete a URL |
+| `GET` | `/s/<short_code>` | Redirect to the original URL |
+| `GET` | `/s/<short_code>/info` | Inspect a short URL without redirecting |
+| `GET` | `/s/<short_code>/stats` | Get click statistics for a short URL |
 
 ## Quick Start (Docker)
 
@@ -96,6 +104,9 @@ curl http://localhost/health    # → {"status":"ok"}
 curl http://localhost/ready     # → {"status":"ready","database":"connected"}
 curl http://localhost/stats     # → {"total_users":3,"total_urls":10,...}
 curl http://localhost/users     # → cached response (check X-Cache header)
+curl -X POST http://localhost/urls \
+     -H 'Content-Type: application/json' \
+     -d '{"user_id":1,"original_url":"https://example.com","title":"Example"}'
 ```
 
 | Service | URL |
@@ -175,7 +186,8 @@ urlpulse/
 │       ├── seed.py          # POST /seed — demo data
 │       ├── stats.py         # GET /stats — system overview
 │       ├── users.py         # User CRUD (cached)
-│       └── url_actions/     # URL shorten/update/delete
+│       ├── urls.py          # URL CRUD + listing
+│       └── url_actions/     # URL shortening, redirect, and legacy compatibility
 ├── nginx/
 │   └── nginx.conf           # Round-robin load balancer config
 ├── tests/                   # pytest suite (SQLite in-memory)
