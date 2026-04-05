@@ -45,7 +45,9 @@ def render_tab_shorten(BASE, user_map):
                 sc, rv = api("POST", "/urls", BASE, json=payload)
             if sc in (200, 201):
                 short_code = rv.get("short_code", "")
-                short_link = rv.get("short_url") or (f"{BASE}/s/{short_code}" if short_code else BASE)
+                short_link = rv.get("redirect_url") or rv.get("short_url") or (
+                    f"{BASE}/urls/{short_code}/redirect" if short_code else BASE
+                )
                 st.markdown(
                     f'<div class="result-box">'
                     f'<div class="result-label">short link created</div>'

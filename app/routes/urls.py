@@ -37,7 +37,9 @@ def _coerce_bool(value):
 
 
 def _get_list_filters():
-    payload = request.get_json(silent=True) or {}
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        payload = {}
 
     limit = request.args.get("limit", type=int)
     if limit is None and payload.get("limit") is not None:
@@ -101,7 +103,11 @@ def list_urls():
 @urls_bp.route("/urls", methods=["POST"])
 def create_url():
     """Create a URL using the collection endpoint expected by the evaluator."""
-    data = request.get_json(silent=True) or {}
+    data = request.get_json(silent=True)
+    if data is None:
+        data = {}
+    elif not isinstance(data, dict):
+        return jsonify(error="Request body must be a JSON object"), 400
     user_id = data.get("user_id")
     original_url = data.get("original_url")
     title = data.get("title")
@@ -123,6 +129,7 @@ def create_url():
         return jsonify(_serialize_url(existing_url) | {
             "short_code": short_code,
             "short_url": f"{request.host_url}s/{short_code}",
+            "redirect_url": f"{request.host_url}urls/{short_code}/redirect",
             "was_existing": True,
         }), 200
 
@@ -152,6 +159,7 @@ def create_url():
     payload.update({
         "short_code": short_code,
         "short_url": f"{request.host_url}s/{short_code}",
+        "redirect_url": f"{request.host_url}urls/{short_code}/redirect",
         "was_existing": False,
     })
     return jsonify(payload), 201
@@ -169,7 +177,11 @@ def get_url(url_id):
 
 @urls_bp.route("/urls/<int:url_id>", methods=["PUT"])
 def update_url(url_id):
-    data = request.get_json(silent=True) or {}
+    data = request.get_json(silent=True)
+    if data is None:
+        data = {}
+    elif not isinstance(data, dict):
+        return jsonify(error="Request body must be a JSON object"), 400
 
     try:
         url = Url.get_by_id(url_id)

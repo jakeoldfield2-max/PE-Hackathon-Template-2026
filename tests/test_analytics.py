@@ -6,6 +6,8 @@ Tests the stats endpoint and click counting.
 import pytest
 import time
 
+from app.models.event import Event
+
 
 class TestClickAnalytics:
     """Test suite for click analytics functionality."""
@@ -120,3 +122,17 @@ class TestURLRedirect:
         assert 'original_url' in data
         assert 'title' in data
         assert 'is_active' in data
+
+
+def test_redirect_persists_click_event_record(client, sample_url):
+    before = Event.select().where(
+        (Event.url_id == sample_url["id"]) & (Event.event_type == "click")
+    ).count()
+
+    response = client.get(f"/s/{sample_url['short_code']}", follow_redirects=False)
+    assert response.status_code in (301, 302)
+
+    after = Event.select().where(
+        (Event.url_id == sample_url["id"]) & (Event.event_type == "click")
+    ).count()
+    assert after == before + 1

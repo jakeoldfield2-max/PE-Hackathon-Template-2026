@@ -73,6 +73,7 @@ def _extract_click_metadata():
 
 
 @url_redirect_bp.route("/s/<short_code>", methods=["GET"])
+@url_redirect_bp.route("/urls/<short_code>/redirect", methods=["GET"])
 def redirect_to_original(short_code):
     """
     Redirect a short URL to its original URL.

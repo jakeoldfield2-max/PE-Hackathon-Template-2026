@@ -1,4 +1,5 @@
 import csv
+import re
 from io import StringIO
 from datetime import datetime
 from contextlib import contextmanager
@@ -14,6 +15,9 @@ from app.models.url import Url
 from app.models.user import User
 
 users_bp = Blueprint("users", __name__)
+
+USERNAME_RE = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]{0,31}$")
+EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
 @contextmanager
@@ -42,6 +46,36 @@ def _parse_int(value, default=None):
         return int(value)
     except (TypeError, ValueError):
         return default
+
+
+def _normalize_username(value):
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip()
+    return normalized or None
+
+
+def _normalize_email(value):
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip().lower()
+    return normalized or None
+
+
+def _validate_username(username):
+    if not username:
+        return "username is required"
+    if not USERNAME_RE.fullmatch(username):
+        return "Invalid username format"
+    return None
+
+
+def _validate_email(email):
+    if not email:
+        return "email is required"
+    if not EMAIL_RE.fullmatch(email):
+        return "Invalid email format"
+    return None
 
 
 def _get_list_params():
@@ -85,11 +119,19 @@ def create_user():
     if not data:
         return jsonify(error="Request body is required"), 400
 
-    username = data.get("username")
-    email = data.get("email")
+    username = _normalize_username(data.get("username"))
+    email = _normalize_email(data.get("email"))
 
     if not username or not email:
         return jsonify(error="username and email are required"), 400
+
+    username_error = _validate_username(username)
+    if username_error:
+        return jsonify(error=username_error), 400
+
+    email_error = _validate_email(email)
+    if email_error:
+        return jsonify(error=email_error), 400
 
     with _db_context():
         if User.select().where(User.username == username).exists():
@@ -140,10 +182,14 @@ def bulk_create_users():
 
     with _db_context(), db.atomic():
         for row in rows:
-            username = (row.get("username") or "").strip()
-            email = (row.get("email") or "").strip()
+            username = _normalize_username(row.get("username"))
+            email = _normalize_email(row.get("email"))
 
             if not username or not email:
+                skipped_rows += 1
+                continue
+
+            if _validate_username(username) or _validate_email(email):
                 skipped_rows += 1
                 continue
 
@@ -160,10 +206,12 @@ def bulk_create_users():
 
     cache_delete_pattern("users:*")
 
-    status_code = 201 if created_users else 200
+    created_count = len(created_users)
+    status_code = 201 if created_count else 200
     return jsonify({
         "message": "Bulk user import complete",
-        "created": len(created_users),
+        "imported": created_count,
+        "created": created_count,
         "skipped": skipped_rows,
         "row_count": len(rows),
         "users": created_users,
@@ -237,14 +285,22 @@ def update_user(user_id):
             return jsonify(error="User not found"), 404
 
         if "username" in updates:
-            if User.select().where((User.username == updates["username"]) & (User.id != user_id)).exists():
+            normalized_username = _normalize_username(updates["username"])
+            username_error = _validate_username(normalized_username)
+            if username_error:
+                return jsonify(error=username_error), 400
+            if User.select().where((User.username == normalized_username) & (User.id != user_id)).exists():
                 return jsonify(error="Username already exists"), 409
-            user.username = updates["username"]
+            user.username = normalized_username
 
         if "email" in updates:
-            if User.select().where((User.email == updates["email"]) & (User.id != user_id)).exists():
+            normalized_email = _normalize_email(updates["email"])
+            email_error = _validate_email(normalized_email)
+            if email_error:
+                return jsonify(error=email_error), 400
+            if User.select().where((User.email == normalized_email) & (User.id != user_id)).exists():
                 return jsonify(error="Email already exists"), 409
-            user.email = updates["email"]
+            user.email = normalized_email
 
         user.save()
 

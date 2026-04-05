@@ -21,4 +21,21 @@ def render_header_stats(BASE):
     c4.metric("Total Events", stats.get("total_events", "—"))
     c5.metric("Created evts", stats.get("events_by_type", {}).get("created", "—"))
 
+    ev_status, events = api("GET", "/events", BASE, json={"limit": 5})
+    if ev_status == 200 and isinstance(events, list) and events:
+        st.markdown(
+            '<div style="font-family:JetBrains Mono,monospace;font-size:0.68rem;color:var(--text-xdim);margin-top:0.8rem;">recent events</div>',
+            unsafe_allow_html=True,
+        )
+        for event in events:
+            ev_type = event.get("event_type", "?")
+            ev_url_id = event.get("url_id", "?")
+            ev_user_id = event.get("user_id", "?")
+            st.markdown(
+                f'<div style="font-family:JetBrains Mono,monospace;font-size:0.72rem;color:var(--text-dim);">'
+                f'[{ev_type}] url:{ev_url_id} user:{ev_user_id}'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+
     st.markdown('<hr class="divider">', unsafe_allow_html=True)

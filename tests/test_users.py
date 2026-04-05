@@ -20,6 +20,18 @@ def test_create_user_missing_fields(client):
     assert response.status_code == 400
 
 
+def test_create_user_invalid_email_format(client):
+    response = client.post("/users", json={"username": "valid_user", "email": "not-an-email"})
+    assert response.status_code == 400
+    assert "email" in response.get_json()["error"].lower()
+
+
+def test_create_user_invalid_username_format(client):
+    response = client.post("/users", json={"username": "bad name!", "email": "valid@example.com"})
+    assert response.status_code == 400
+    assert "username" in response.get_json()["error"].lower()
+
+
 def test_create_user_duplicate_username(client):
     client.post("/users", json={"username": "dupe", "email": "a@b.com"})
     response = client.post("/users", json={"username": "dupe", "email": "c@d.com"})
@@ -121,8 +133,10 @@ def test_bulk_create_users(client):
 
     assert response.status_code in (200, 201)
     data = response.get_json()
+    assert data["imported"] == 2
     assert data["created"] == 2
     assert data["row_count"] == 2
+    assert data["message"] == "Bulk user import complete"
 
     list_response = client.get("/users")
     assert len(list_response.get_json()["users"]) == 2
@@ -142,6 +156,25 @@ def test_bulk_create_users_invalid_row_count(client):
 
     assert response.status_code == 400
     assert "row_count" in response.get_json()["error"]
+
+
+def test_bulk_create_users_skips_malformed_rows(client):
+    csv_data = "username,email\nvalid_user,valid@example.com\n!,bad_email\n"
+
+    response = client.post(
+        "/users/bulk",
+        data={
+            "file": (BytesIO(csv_data.encode("utf-8")), "users.csv"),
+            "row_count": "2",
+        },
+        content_type="multipart/form-data",
+    )
+
+    assert response.status_code in (200, 201)
+    data = response.get_json()
+    assert data["created"] == 1
+    assert data["imported"] == 1
+    assert data["skipped"] == 1
 
 
 def test_delete_user_cleans_related_urls_and_events(client, sample_user_with_api_key):

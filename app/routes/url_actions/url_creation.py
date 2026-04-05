@@ -153,7 +153,11 @@ def shorten_url():
         - title: The provided title
         - was_existing: True if returning an existing URL (idempotent)
     """
-    data = request.get_json()
+    data = request.get_json(silent=True)
+    if data is None:
+        return jsonify(error="Request body is required"), 400
+    if not isinstance(data, dict):
+        return jsonify(error="Request body must be a JSON object"), 400
 
     # User is set by @require_api_key decorator
     user = g.authenticated_user
@@ -173,10 +177,12 @@ def shorten_url():
     # If URL already exists for this user, return it (idempotent)
     if existing_url:
         short_url = f"{request.host_url}s/{short_code}"
+        redirect_url = f"{request.host_url}urls/{short_code}/redirect"
         return jsonify({
             "id": existing_url.id,
             "short_code": short_code,
             "short_url": short_url,
+            "redirect_url": redirect_url,
             "original_url": existing_url.original_url,
             "title": existing_url.title,
             "created_at": existing_url.created_at.isoformat(),
@@ -212,11 +218,13 @@ def shorten_url():
 
     # Build the shortened URL
     short_url = f"{request.host_url}s/{short_code}"
+    redirect_url = f"{request.host_url}urls/{short_code}/redirect"
 
     return jsonify({
         "id": url.id,
         "short_code": short_code,
         "short_url": short_url,
+        "redirect_url": redirect_url,
         "original_url": original_url,
         "title": title,
         "created_at": url.created_at.isoformat(),
