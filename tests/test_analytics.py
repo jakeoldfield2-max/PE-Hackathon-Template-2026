@@ -136,3 +136,19 @@ def test_redirect_persists_click_event_record(client, sample_url):
         (Event.url_id == sample_url["id"]) & (Event.event_type == "click")
     ).count()
     assert after == before + 1
+
+
+def test_redirect_persists_click_event_when_redis_unavailable(client, sample_url, monkeypatch):
+    monkeypatch.setattr("app.analytics.get_redis", lambda: None)
+
+    before = Event.select().where(
+        (Event.url_id == sample_url["id"]) & (Event.event_type == "click")
+    ).count()
+
+    response = client.get(f"/s/{sample_url['short_code']}", follow_redirects=False)
+    assert response.status_code in (301, 302)
+
+    after = Event.select().where(
+        (Event.url_id == sample_url["id"]) & (Event.event_type == "click")
+    ).count()
+    assert after == before + 1

@@ -58,6 +58,20 @@ def test_create_event(client):
     assert data["details"]["referrer"] == "https://google.com"
 
 
+def test_create_event_rejects_malformed_details(client):
+    client.post("/seed")
+
+    response = client.post("/events", json={
+        "url_id": 1,
+        "user_id": 1,
+        "event_type": "click",
+        "details": "not-an-object",
+    })
+
+    assert response.status_code == 400
+    assert "details" in response.get_json()["error"].lower()
+
+
 def test_get_events_limit_returns_newest_first(client):
     client.post("/seed")
     client.post("/events", json={

@@ -39,11 +39,6 @@ def publish_click_event(short_code, metadata=None):
         short_code: The short code that was clicked
         metadata: Optional dict with additional info (ip, user_agent, referer, etc.)
     """
-    r = get_redis()
-    if r is None:
-        logger.debug("Redis unavailable, click event not recorded for %s", short_code)
-        return
-
     try:
         # Persist click event immediately so tracking works even without subscriber.
         # Import lazily to avoid circular imports at module load.
@@ -61,6 +56,11 @@ def publish_click_event(short_code, metadata=None):
             )
         except Url.DoesNotExist:
             logger.warning("Click event for unknown short_code: %s", short_code)
+
+        r = get_redis()
+        if r is None:
+            logger.debug("Redis unavailable, click counter/pubsub skipped for %s", short_code)
+            return
 
         # Increment click counter (atomic, fast)
         counter_key = f"clicks:{short_code}"

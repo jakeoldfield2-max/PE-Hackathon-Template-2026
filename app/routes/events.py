@@ -114,6 +114,10 @@ def create_event():
         return jsonify(error="user_id is required"), 400
     if not event_type:
         return jsonify(error="event_type is required"), 400
+    if details is None:
+        details = {}
+    elif not isinstance(details, dict):
+        return jsonify(error="details must be a JSON object"), 400
 
     try:
         url = Url.get_by_id(url_id)
@@ -130,7 +134,7 @@ def create_event():
         user_id=user,
         event_type=str(event_type).strip(),
         timestamp=datetime.now(),
-        details=json.dumps(details if details is not None else {}),
+        details=json.dumps(details),
     )
 
     return jsonify(_serialize_event(event)), 201
