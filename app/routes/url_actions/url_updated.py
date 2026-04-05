@@ -28,10 +28,12 @@ def update_url():
     Returns:
         - Confirmation with updated URL details
     """
-    data = request.get_json()
+    data = request.get_json(silent=True)
 
     if not data:
         return jsonify(error="Request body is required"), 400
+    if not isinstance(data, dict):
+        return jsonify(error="Request body must be a JSON object"), 400
 
     user_id = data.get("user_id")
     url_id = data.get("url_id")
