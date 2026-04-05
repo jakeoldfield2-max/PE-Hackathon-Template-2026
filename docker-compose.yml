@@ -13,6 +13,12 @@ services:
     env_file: .env
     environment:
       - INSTANCE_ID=app-1
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
     depends_on:
       postgres:
         condition: service_healthy
@@ -26,6 +32,12 @@ services:
     env_file: .env
     environment:
       - INSTANCE_ID=app-2
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
     depends_on:
       postgres:
         condition: service_healthy
@@ -39,6 +51,12 @@ services:
     env_file: .env
     environment:
       - INSTANCE_ID=app-3
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
     depends_on:
       postgres:
         condition: service_healthy
@@ -66,7 +84,7 @@ services:
     container_name: urlpulse-prometheus
     restart: always
     ports:
-      - "9090:9090"
+      - "127.0.0.1:9090:9090"
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
@@ -74,6 +92,8 @@ services:
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
       - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=15d"
+      - "--storage.tsdb.retention.size=1GB"
       - "--web.enable-lifecycle"
     depends_on:
       - app-1
@@ -103,7 +123,7 @@ services:
     container_name: urlpulse-alertmanager
     restart: always
     ports:
-      - "9093:9093"
+      - "127.0.0.1:9093:9093"
     volumes:
       - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
     command:
@@ -127,7 +147,8 @@ services:
       - DB_PASS=${POSTGRES_PASSWORD}
     volumes:
       - ./alertmanager/webhook-adapter.py:/app/webhook-adapter.py:ro
-    command: ["sh", "-c", "pip install psycopg2-binary -q && python /app/webhook-adapter.py"]
+      - ./alertmanager/requirements-webhook.txt:/app/requirements.txt:ro
+    command: ["sh", "-c", "pip install -q -r /app/requirements.txt && python /app/webhook-adapter.py"]
     depends_on:
       postgres:
         condition: service_healthy

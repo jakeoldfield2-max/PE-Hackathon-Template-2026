@@ -1,7 +1,10 @@
 .venv/
 .env
+.env.example
 .git/
+.github/
 .gitignore
+.idea/
 .pytest_cache/
 .coverage
 __pycache__/
@@ -12,3 +15,10 @@ tests/
 *.md
 .dockerignore
 docker-compose.yml
+grafana/
+prometheus/
+alertmanager/
+k6/
+locust/
+scripts/
+test_crash.py

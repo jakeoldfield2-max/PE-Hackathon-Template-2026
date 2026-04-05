@@ -15,7 +15,7 @@ build/
 SECRETS.md
 
 # uv
-uv.lock
+# for reproducible builds (uv sync --frozen in Dockerfile and CI).
 
 # IDE
 .vscode/

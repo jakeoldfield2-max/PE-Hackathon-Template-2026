@@ -7,16 +7,22 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # WHY uv: Fast dependency installation, matches local dev tooling
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+# WHY pinned: :latest means builds are non-reproducible if uv ships a breaking change
+COPY --from=ghcr.io/astral-sh/uv:0.6 /uv /usr/local/bin/uv
 
 WORKDIR /app
 
 # WHY: Layer caching — dependencies change less often than app code
-COPY pyproject.toml .python-version ./
-RUN uv sync --no-dev --frozen 2>/dev/null || uv sync --no-dev
+# WHY uv.lock included: enables --frozen for deterministic, reproducible installs
+COPY pyproject.toml .python-version uv.lock ./
+RUN uv sync --no-dev --frozen
 
 # Copy application code
 COPY . .
+
+# WHY non-root: if the app is compromised, attacker doesn't have root in the container
+RUN addgroup --system app && adduser --system --ingroup app app
+USER app
 
 EXPOSE 5000
 
@@ -29,6 +35,8 @@ CMD ["uv", "run", "gunicorn", \
     "--bind", "0.0.0.0:5000", \
     "--workers", "4", \
     "--timeout", "30", \
+    "--limit-request-line", "8190", \
+    "--limit-request-fields", "100", \
     "--access-logfile", "-", \
     "--access-logformat", "{\"timestamp\":\"%(t)s\",\"remote_addr\":\"%(h)s\",\"method\":\"%(m)s\",\"path\":\"%(U)s\",\"query\":\"%(q)s\",\"status\":\"%(s)s\",\"response_length\":\"%(B)s\",\"duration_us\":\"%(D)s\",\"user_agent\":\"%(a)s\",\"request_id\":\"%({X-Request-ID}i)s\"}", \
     "--error-logfile", "-", \
