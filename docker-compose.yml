@@ -13,6 +13,10 @@ services:
     env_file: .env
     environment:
       - INSTANCE_ID=app-1
+    logging:
+      driver: gcplogs
+      options:
+        gcp-log-cmd: "true"
     depends_on:
       postgres:
         condition: service_healthy
@@ -26,6 +30,10 @@ services:
     env_file: .env
     environment:
       - INSTANCE_ID=app-2
+    logging:
+      driver: gcplogs
+      options:
+        gcp-log-cmd: "true"
     depends_on:
       postgres:
         condition: service_healthy
@@ -39,6 +47,10 @@ services:
     env_file: .env
     environment:
       - INSTANCE_ID=app-3
+    logging:
+      driver: gcplogs
+      options:
+        gcp-log-cmd: "true"
     depends_on:
       postgres:
         condition: service_healthy

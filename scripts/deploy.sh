@@ -102,6 +102,26 @@ if [ "$ROLLBACK" = "true" ]; then
   exit 0
 fi
 
+# ── Ensure VM has logging scopes (gcloud local mode only) ────────────────────
+if [ -z "${DEPLOY_HOST:-}" ] && command -v gcloud >/dev/null 2>&1; then
+  CURRENT_SCOPES=$(gcloud compute instances describe "$VM_NAME" --zone="$ZONE" \
+    --format='value(serviceAccounts[0].scopes)' 2>/dev/null || echo "")
+  if ! echo "$CURRENT_SCOPES" | grep -q "logging.write"; then
+    log "Adding logging/monitoring scopes to VM (requires restart)"
+    gcloud compute instances stop "$VM_NAME" --zone="$ZONE" --quiet
+    gcloud compute instances set-service-account "$VM_NAME" --zone="$ZONE" \
+      --scopes=default,logging-write,monitoring-write --quiet
+    gcloud compute instances start "$VM_NAME" --zone="$ZONE" --quiet
+    sleep_with_progress 10 "Waiting for VM to restart"
+  fi
+  # Ensure Logging API is enabled
+  if ! gcloud services list --enabled --filter="name:logging.googleapis.com" \
+    --format="value(name)" 2>/dev/null | grep -q logging; then
+    log "Enabling Cloud Logging API"
+    gcloud services enable logging.googleapis.com
+  fi
+fi
+
 # ── Deploy ───────────────────────────────────────────────────────────────────
 log "Deploying to $TARGET"
 
