@@ -217,6 +217,56 @@ urlpulse/
 CI auto-deploys on merge to `main` (blocked unless tests + docker-build pass).
 See [docs/DEPLOY.md](docs/DEPLOY.md) for first-time setup and troubleshooting.
 
+
+## Troubleshooting
+
+### 1. Port Binding Errors (`Address already in use`)
+Since this template spins up a full observability stack, it requires several open ports.
+* **Symptoms:** Error message: `Bind for 0.0.0.0:5432 failed: port is already allocated`.
+* **Solution:** Identify and stop any local services running on these ports:
+    * **80:** Nginx (Check for Apache/Local Nginx)
+    * **5432:** PostgreSQL
+    * **6379:** Redis
+    * **3000:** Grafana
+* *Temporary fix:* You can modify the left-hand side of the `ports` mapping in `docker-compose.yml` (e.g., `"5433:5432"`) to bypass the conflict.
+
+### 2. "uv: command not found"
+The local (non-Docker) setup requires `uv`, a high-performance Python package manager.
+* **Symptoms:** `bash: uv: command not found` when trying to run `uv sync` or `uv run`.
+* **Solution:** Install `uv` via the official installer:
+    ```bash
+    curl -LsSf [https://astral.sh/uv/install.sh](https://astral.sh/uv/install.sh) | sh
+    ```
+    Alternatively, if you prefer not to use `uv`, you can manually create a virtual environment and install dependencies listed in `pyproject.toml`.
+
+### 3. Database Connection Refused (Non-Docker Setup)
+* **Symptoms:** `peewee.OperationalError: (psycopg2.OperationalError) connection to server at "localhost" (::1), port 5432 failed`.
+* **Solution:** If running the app locally (outside Docker), ensure your `.env` has `DATABASE_HOST=localhost`. If using the Docker database with a local app, ensure you have exposed port `5432` in your Compose file.
+
+## Environment Variables
+
+The project uses a .env file to manage configuration across the Flask app, PostgreSQL, Redis, and the observability stack.
+
+| Variable               | Description                                         | Default (Docker) |
+|------------------------|-----------------------------------------------------|------------------|
+| **App & Database**         |                                                     |                  |
+| FLASK_DEBUG            | Enables debug mode and hot-reloading.               | true             |
+| DATABASE_NAME          | The name of the Postgres database.                  | hackathon_db     |
+| DATABASE_HOST          | Hostname of the DB. Use localhost for local runs.   | postgres         |
+| DATABASE_USER          | Database user for the application.                  | postgres         |
+| DATABASE_PASSWORD      | Required. Password for the application user.        | Required         |
+| Postgres Bootstrap     |                                                     |                  |
+| POSTGRES_DB            | Initial database created by the container.          | hackathon_db     |
+| POSTGRES_PASSWORD      | Required. Root password for the Postgres container. | Required         |
+| **Redis**                  |                                                     |                  |
+| REDIS_HOST             | Hostname for the Redis cache.                       | redis            |
+| REDIS_PORT             | Port for Redis connections.                         | 6379             |
+| **Observability**          |                                                     |                  |
+| GRAFANA_ADMIN_USER     | Admin username for the Grafana dashboard.           | Required         |
+| GRAFANA_ADMIN_PASSWORD | Admin password for the Grafana dashboard.           | Required         |
+| DISCORD_WEBHOOK_URL    | Webhook for Alertmanager notifications.             | Required         |
+
+
 ## Testing the Hosted App
 
 ```bash
