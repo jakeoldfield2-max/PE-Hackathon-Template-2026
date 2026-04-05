@@ -56,3 +56,27 @@ def test_create_event(client):
     assert data["user_id"] == 1
     assert isinstance(data["details"], dict)
     assert data["details"]["referrer"] == "https://google.com"
+
+
+def test_get_events_limit_returns_newest_first(client):
+    client.post("/seed")
+    client.post("/events", json={
+        "url_id": 1,
+        "user_id": 1,
+        "event_type": "click",
+        "details": {"kind": "first"},
+    })
+    client.post("/events", json={
+        "url_id": 1,
+        "user_id": 1,
+        "event_type": "click",
+        "details": {"kind": "second"},
+    })
+
+    response = client.get("/events", json={"limit": 1})
+    assert response.status_code == 200
+    data = response.get_json()
+    assert isinstance(data, list)
+    assert len(data) == 1
+    assert data[0]["event_type"] == "click"
+    assert data[0]["details"].get("kind") == "second"

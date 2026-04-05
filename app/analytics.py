@@ -45,6 +45,23 @@ def publish_click_event(short_code, metadata=None):
         return
 
     try:
+        # Persist click event immediately so tracking works even without subscriber.
+        # Import lazily to avoid circular imports at module load.
+        from app.models.event import Event
+        from app.models.url import Url
+
+        try:
+            url = Url.get(Url.short_code == short_code)
+            Event.create(
+                url_id=url,
+                user_id=url.user_id,
+                event_type="click",
+                timestamp=datetime.now(timezone.utc),
+                details=json.dumps(metadata or {}),
+            )
+        except Url.DoesNotExist:
+            logger.warning("Click event for unknown short_code: %s", short_code)
+
         # Increment click counter (atomic, fast)
         counter_key = f"clicks:{short_code}"
         r.incr(counter_key)

@@ -68,13 +68,28 @@ def list_events():
     if not event_type and "event_type" in payload:
         event_type = payload.get("event_type")
 
-    query = Event.select().order_by(Event.id)
+    limit = request.args.get("limit", type=int)
+    if limit is None and "limit" in payload:
+        limit = _parse_int(payload.get("limit"))
+
+    offset = request.args.get("offset", type=int)
+    if offset is None and "offset" in payload:
+        offset = _parse_int(payload.get("offset"))
+    if offset is None or offset < 0:
+        offset = 0
+
+    query = Event.select().order_by(Event.timestamp.desc(), Event.id.desc())
     if url_id is not None:
         query = query.where(Event.url_id == url_id)
     if user_id is not None:
         query = query.where(Event.user_id == user_id)
     if event_type:
         query = query.where(Event.event_type == str(event_type).strip())
+
+    if limit is not None and limit > 0:
+        query = query.limit(min(limit, 200)).offset(offset)
+    elif offset:
+        query = query.offset(offset)
 
     return jsonify([_serialize_event(event) for event in query]), 200
 
