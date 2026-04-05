@@ -69,6 +69,17 @@ def create_app():
             # Create tables if they don't exist
             db.create_tables([User, Url, Event], safe=True)
             _log_startup_event("INFO", "Database tables created/verified successfully")
+
+            # Migration: Add api_key column to users table if it doesn't exist
+            try:
+                db.execute_sql("""
+                    ALTER TABLE users
+                    ADD COLUMN IF NOT EXISTS api_key VARCHAR(255) UNIQUE
+                """)
+                _log_startup_event("INFO", "Migration: api_key column verified/added")
+            except Exception as migration_err:
+                _log_startup_event("WARNING", "Migration for api_key column failed",
+                                   error=str(migration_err))
         except Exception as e:
             _log_startup_event("WARNING", "Database initialization failed - app will start without DB",
                                error_type=type(e).__name__,

@@ -26,10 +26,11 @@ export const options = {
 // TEST SCENARIO: URL Lifecycle (Create → Edit → Delete)
 //
 // Simulates a complete URL lifecycle:
-// 1. POST /users   - Create a new user account
-// 2. POST /shorten - Create a new shortened URL
-// 3. POST /update  - Edit the URL (change title)
-// 4. POST /delete  - Delete the URL
+// 1. POST /users              - Create a new user account
+// 2. POST /users/:id/api-key  - Generate API key for authentication
+// 3. POST /shorten            - Create a new shortened URL (with API key)
+// 4. POST /update             - Edit the URL (change title)
+// 5. POST /delete             - Delete the URL
 // =============================================================================
 export default function () {
   const headers = { 'Content-Type': 'application/json' };
@@ -60,15 +61,41 @@ export default function () {
   const userId = JSON.parse(signupRes.body).id;
 
   // -------------------------------------------------------------------------
-  // Step 2: Create a URL
+  // Step 2: Generate API key for the user
+  // -------------------------------------------------------------------------
+  const apiKeyRes = http.post(`${BASE_URL}/users/${userId}/api-key`, null, { headers });
+
+  const apiKeySuccess = check(apiKeyRes, {
+    'generate api key: status is 201': (r) => r.status === 201,
+    'generate api key: has api_key': (r) => {
+      try {
+        return JSON.parse(r.body).api_key !== undefined;
+      } catch {
+        return false;
+      }
+    },
+  });
+
+  if (!apiKeySuccess) {
+    console.log(`API key generation failed: ${apiKeyRes.status} - ${apiKeyRes.body}`);
+    return;
+  }
+
+  const apiKey = JSON.parse(apiKeyRes.body).api_key;
+  const authHeaders = {
+    'Content-Type': 'application/json',
+    'X-API-Key': apiKey,
+  };
+
+  // -------------------------------------------------------------------------
+  // Step 3: Create a URL (with API key authentication)
   // -------------------------------------------------------------------------
   const createUrlPayload = JSON.stringify({
-    user_id: userId,
     original_url: `https://example.com/original/${uniqueId}`,
     title: urlTitle,
   });
 
-  const createRes = http.post(`${BASE_URL}/shorten`, createUrlPayload, { headers });
+  const createRes = http.post(`${BASE_URL}/shorten`, createUrlPayload, { headers: authHeaders });
 
   const createSuccess = check(createRes, {
     'create url: status is 201': (r) => r.status === 201,
@@ -91,7 +118,7 @@ export default function () {
   sleep(0.5); // Brief pause between operations
 
   // -------------------------------------------------------------------------
-  // Step 3: Edit the URL (update the title)
+  // Step 4: Edit the URL (update the title)
   // -------------------------------------------------------------------------
   const updatedTitle = `Updated ${urlTitle}`;
   const updatePayload = JSON.stringify({
@@ -122,7 +149,7 @@ export default function () {
   sleep(0.5); // Brief pause between operations
 
   // -------------------------------------------------------------------------
-  // Step 4: Delete the URL
+  // Step 5: Delete the URL
   // -------------------------------------------------------------------------
   const deletePayload = JSON.stringify({
     user_id: userId,
@@ -157,7 +184,7 @@ export function setup() {
     throw new Error(`Service not healthy! Status: ${healthRes.status}`);
   }
   console.log(`Starting URL Lifecycle test with ${VIRTUAL_USERS} virtual users for ${TEST_DURATION}`);
-  console.log('Flow: Create User → Create URL → Edit URL → Delete URL');
+  console.log('Flow: Create User → Generate API Key → Create URL → Edit URL → Delete URL');
 }
 
 export function teardown() {

@@ -26,9 +26,10 @@ export const options = {
 // TEST SCENARIO: User Signup + URL Shortening
 //
 // Simulates a complete user journey:
-// 1. POST /users   - Create a new user account
-// 2. POST /shorten - Submit a URL to be shortened
-// 3. Verify the shortened URL is returned
+// 1. POST /users              - Create a new user account
+// 2. POST /users/:id/api-key  - Generate API key for authentication
+// 3. POST /shorten            - Submit a URL to be shortened (with API key)
+// 4. Verify the shortened URL is returned
 // =============================================================================
 export default function () {
   const headers = { 'Content-Type': 'application/json' };
@@ -68,15 +69,42 @@ export default function () {
   const userId = JSON.parse(signupRes.body).id;
 
   // -------------------------------------------------------------------------
-  // Step 2: Shorten URL - Submit a URL to be shortened
+  // Step 2: Generate API key for authentication
+  // -------------------------------------------------------------------------
+  const apiKeyRes = http.post(`${BASE_URL}/users/${userId}/api-key`, null, { headers });
+
+  const apiKeySuccess = check(apiKeyRes, {
+    'api key: status is 201': (r) => r.status === 201,
+    'api key: response has api_key': (r) => {
+      try {
+        const body = JSON.parse(r.body);
+        return body.api_key !== undefined && body.api_key.startsWith('upk_');
+      } catch {
+        return false;
+      }
+    },
+  });
+
+  if (!apiKeySuccess) {
+    console.log(`API key generation failed: ${apiKeyRes.status} - ${apiKeyRes.body}`);
+    return;
+  }
+
+  const apiKey = JSON.parse(apiKeyRes.body).api_key;
+  const authHeaders = {
+    'Content-Type': 'application/json',
+    'X-API-Key': apiKey,
+  };
+
+  // -------------------------------------------------------------------------
+  // Step 3: Shorten URL - Submit a URL to be shortened (with API key)
   // -------------------------------------------------------------------------
   const urlPayload = JSON.stringify({
-    user_id: userId,
     original_url: `https://example.com/page/${uniqueId}`,
     title: `Test URL ${uniqueId}`,
   });
 
-  const shortenRes = http.post(`${BASE_URL}/shorten`, urlPayload, { headers });
+  const shortenRes = http.post(`${BASE_URL}/shorten`, urlPayload, { headers: authHeaders });
 
   check(shortenRes, {
     'shorten: status is 201': (r) => r.status === 201,
@@ -112,6 +140,7 @@ export function setup() {
     throw new Error(`Service not healthy! Status: ${healthRes.status}`);
   }
   console.log(`Starting User + URL test with ${VIRTUAL_USERS} virtual users for ${TEST_DURATION}`);
+  console.log('Flow: Create User → Generate API Key → Shorten URL');
 }
 
 export function teardown() {
