@@ -195,6 +195,7 @@ urlpulse/
 │   ├── provision.sh         # One-time GCP VM setup (idempotent)
 │   ├── setup-vm.sh          # Create .env, start app, seed data on VM
 │   ├── deploy.sh            # SSH deploy to GCP VM (+ rollback)
+│   ├── teardown.sh          # Destroy all hosted infrastructure
 │   └── chaos.sh             # Chaos engineering (kill instances, DB, Redis)
 ├── docs/                    # Architecture, decisions, deploy guide, runbooks
 ├── .env.example             # Common env schema (Docker baseline + minimal overrides)
@@ -212,6 +213,7 @@ urlpulse/
 ./scripts/setup-vm.sh              # Create .env, start app, seed data (prompts for secrets)
 ./scripts/deploy.sh                # Deploy latest main via SSH
 ./scripts/deploy.sh --rollback     # Revert last deploy
+./scripts/teardown.sh              # Destroy all hosted infrastructure (VM, IP, firewall, keys)
 ```
 
 CI auto-deploys on merge to `main` (blocked unless tests + docker-build pass).
